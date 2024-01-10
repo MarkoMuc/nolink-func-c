@@ -56,3 +56,4 @@ In part 3 we need to copy the `.txt` section into RAM and add execute permission
 - We may need to modify some bytes in the section to perform relocations.
 - Each section needs to have its own permissions, and as such, each page in memory needs those permissions. This is why we need to relocate and align the memory. Therefore, we need to create new page-aligned memory ranges and copy the data there.
 
+## [Part 2](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)

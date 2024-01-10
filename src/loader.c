@@ -1,5 +1,5 @@
 /*
- * Most if not all if this code belongs to Ignat Korchagin
+ * Most, if not all, of this code belongs to Ignat Korchagin
  * and is copied from his blog post https://blog.cloudflare.com/how-to-execute-an-object-file-part-1
  *
  *
