@@ -2,7 +2,9 @@
 
 ## Resources
 
-- [How to execute an object file series.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
+- [How to execute an object file part 1.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
+- [How to execute an object file part 2.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
+
 
 ## Contents
 
