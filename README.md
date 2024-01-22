@@ -4,7 +4,8 @@
 
 - [How to execute an object file part 1.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
 - [How to execute an object file part 2.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
-
+- [How to execute an object file part 3.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-3)
+- [How to execute an object file part 4.](https://blog.cloudflare.com/how-to-execute-an-object-file-part-4)
 
 ## Contents
 

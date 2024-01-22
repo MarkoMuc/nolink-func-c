@@ -1,6 +1,6 @@
 /*
  * Most, if not all, of this code belongs to Ignat Korchagin
- * and is copied from his blog post https://blog.cloudflare.com/how-to-execute-an-object-file-part-1
+ * and is copied from his blog post https://blog.cloudflare.com/how-to-execute-an-object-file-part-(1..4)
  *
  *
 */
@@ -16,6 +16,11 @@
 #include <stdlib.h>
 #include <elf.h>
 #include <errno.h>
+
+//#define MONKEY_PATCH
+
+/* from https://elixir.bootlin.com/linux/v5.11.6/source/arch/x86/include/asm/elf.h#L51 */
+#define R_X86_64_PLT32 4
 
 typedef union {
     const Elf64_Ehdr *hdr;
@@ -64,6 +69,20 @@ static void load_obj(){
 
 }
 
+static uint8_t *section_runtime_base(const Elf64_Shdr *section){
+    const char *section_name = shstrtab + section->sh_name;
+    size_t section_name_len = strlen(section_name);
+
+    // We only mmap .text section so far
+    if(strlen(".text") == section_name_len && !strcmp(".text", section_name)    ){
+        return text_runtime_base;
+    }
+
+    fprintf(stderr, "No runtime base address for section%s\n.", section_name);
+    exit(ENOENT);
+}
+
+
 static const Elf64_Shdr *lookup_section(const char *name){
     size_t name_len = strlen(name);
 
@@ -79,6 +98,39 @@ static const Elf64_Shdr *lookup_section(const char *name){
 
     return NULL;
 }
+
+static void do_text_relocations(){
+    // Here we use a hack : the name .rela.text is a convention, but not a rule. 
+    // To actually figure out which section should be patched by these relocations we would need to examine the _rela_text_hdr.
+    const Elf64_Shdr *rela_text_hdr = lookup_section(".rela.text");
+    if (!rela_text_hdr) {
+        fputs("Failed to find .rela.text\n", stderr);
+        exit(ENOEXEC);
+    }
+
+    int num_relocations = rela_text_hdr->sh_size/rela_text_hdr->sh_entsize;
+    const Elf64_Rela *relocations = (Elf64_Rela *)(obj.base + rela_text_hdr->sh_offset);
+    
+    for(int i = 0; i < num_relocations; i++){
+        int symbol_idx = ELF64_R_SYM(relocations[i].r_info);
+        int type = ELF64_R_TYPE(relocations[i].r_info);
+
+        // Where to patch .text
+        uint8_t *patch_offset = text_runtime_base + relocations[i].r_offset;
+        uint8_t *symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
+        
+        switch(type)
+        {
+            case R_X86_64_PLT32:
+                /* L + A - P, 32 bit output */
+                *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
+                printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
+                break;
+        
+        }
+    }
+}
+
 
 static void parse_obj(){
     // Sections table offset
@@ -116,9 +168,24 @@ static void parse_obj(){
         perror("Failed to allocate memory for .text");
         exit(errno);
     }
-
+    
+    // Copy the contents of .text section from the ELf file
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
 
+#ifdef MONKEY_PATCH
+    // The first add5 callq ARGUMENT! is located at offset 0x20 and should be 0xffffffdc.
+    // 0x1f is the instruction offset + 1 byte instruction prefix.
+    *((uint32_t *)(text_runtime_base + 0x1f + 1)) = 0xffffffdc;
+    
+    // The second add5 call ARGUMENT! is located at offsset 0x2d and should be 0xffffffcf
+    
+    *((uint32_t *)(text_runtime_base + 0x2c + 1)) = 0xffffffcf;
+#else
+    do_text_relocations();
+#endif
+
+
+    // Make the .text copy readonly and executable
     if (mprotect(text_runtime_base, page_align(text_hdr->sh_size), PROT_READ | PROT_EXEC)) {
         perror("Failed to make .text executable");
         exit(errno);
