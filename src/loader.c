@@ -210,16 +210,16 @@ static void *lookup_function(const char *name){
 static void execute_funcs(){
     int (*add5)(int);
     int (*add10)(int);
-    
+
     add5 = lookup_function("add5");
     if (!add5) {
         fputs("Failed to find add5 function\n", stderr);
         exit(ENOENT);
     }
-    
+
     puts("Executing add5...");
     printf("add5(%d) = %d\n", 42, add5(42));
-    
+
     add10 = lookup_function("add10");
     if (!add10) {
         fputs("Failed to find add10 function\n", stderr);
