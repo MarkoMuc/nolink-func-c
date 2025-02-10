@@ -18,7 +18,7 @@ Runtime linking is done by the OS, which invokes the *dynamic loader*. The dynam
 
 The following is the contents of the object file, that we will load into memory.
 
-```
+```c
 int add5(int num){
     return num + 5;
 }
