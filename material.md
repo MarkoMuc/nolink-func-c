@@ -2,6 +2,10 @@
 
 Each part corresponds to a part in the *How to execute object files* series.
 
+## Additional material
+
+- [ELF file](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
+
 ## [Part 1](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
 
 Compilation is a multi-stage process. First, the source code is compiled into machine code, which is saved in object files, afterwards, the linker assembles all object files into a single working program and binds references together. The output of a linker is an executable file.
@@ -24,7 +28,7 @@ int add10(int num){
 }
 
 int add(int a, int b) {
-    return a + b;
+    return a + ;
 }
 ```
 
