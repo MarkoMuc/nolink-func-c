@@ -28,7 +28,7 @@ int add10(int num){
 }
 
 int add(int a, int b) {
-    return a + ;
+    return a + b;
 }
 ```
 
