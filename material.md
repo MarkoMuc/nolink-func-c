@@ -12,13 +12,27 @@ Runtime linking is done by the OS, which invokes the *dynamic loader*. The dynam
 
 ### Loading an object file into the process memory
 
-First lets create a function
+The following is the contents of the object file, that we will load into memory.
 
-First, create a `obj.c` file with simple functions and compile it into an object file with `gcc -c obj.c`.
+```
+int add5(int num){
+    return num + 5;
+}
+
+int add10(int num){
+    return num + 10;
+}
+
+int add(int a, int b) {
+    return a + b;
+}
+```
+
+The file can be found in `obj/obj_part1.c`. To create an object file, we compile it with `gcc -c obj_part1.c`.
 
 Executing the object file is the same as using it as a library. Since we do not use dynamic linking, the dynamic loader will not load the object file for us, we must do this manually. The object file needs to be loaded into the RAM.
 
-At this stage, the object file is simply mapped into memory. To do this, `mmap` is used, so the OS lazily reads the file when needed. Afterwards, we need to parse the object file, which is actually an ELF file.
+At this stage, the object file is copied into memory. This can be done by filling up a buffer, but since an object file can be large, we instead map it into memory when needed. To do this, `mmap` is used, so the OS lazily reads the part of the file we need when we need it. Note that this only maps in the object file, afterwards we need to parse the object file, which is actually an ELF file.
 
 ### Parsing ELF files
 
