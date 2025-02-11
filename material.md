@@ -73,7 +73,7 @@ The output of `readelf` command has various fields:
   - `Size`: size of each symbol.
   - `Value`: the name is misleading, this represents the offset from the start of the containing section in this context. In our case functions are offset from the `.text` section.
 
-### Finding and executing a function
+### Finding and executing a function form an object file
 
 The plan to execute a function:
 
@@ -83,7 +83,7 @@ The plan to execute a function:
 4. Find function offsets in the symbol table.
 5. Execute the functions.
 
-In part 3 we need to copy the `.txt` section into RAM and add execute permissions. This is done for multiple reasons:
+In part 3 we need to copy the `.text` section into RAM and add execute permissions. This is done for multiple reasons:
 
 - Many CPUs don't allow or are slow at executing unaligned memory (4 kB for x86). The `.txt` section is not guaranteed to be page aligned.
 - We may need to modify some bytes in the section to perform relocations.
