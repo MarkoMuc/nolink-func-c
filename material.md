@@ -5,6 +5,8 @@ Each part corresponds to a part in the *How to execute object files* series.
 ## Additional material
 
 - [ELF file](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
+- [elf.h](https://man7.org/linux/man-pages/man5/elf.5.html)
+- [readelf](https://man7.org/linux/man-pages/man1/readelf.1.html) 
 
 ## [Part 1](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
 
@@ -65,7 +67,11 @@ Short descriptions of various ELF sections:
 
 Our functions are stored in the `.text` sections, but since the section is just a byte blob, we need to extract the locations of each function. To do this, we use the `.symtab` section. `readelf --symbols` can come in handy to read and visualize it.
 
-The output of `readelf` command has various fields. The Ndx column tells us to which section the symbol belongs. The other important column is Value, which tells us the offset from the start of the containing section.
+The output of `readelf` command has various fields:
+  - `Ndx` column: tells us the index of the section, where the symbol is located.
+  - `Type`: symbol type, in our case we care about  `FUNC` type.
+  - `Size`: size of each symbol.
+  - `Value`: the name is misleading, this represents the offset from the start of the containing section in this context. In our case functions are offset from the `.text` section.
 
 ### Finding and executing a function
 
