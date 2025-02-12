@@ -6,7 +6,9 @@ Each part corresponds to a part in the *How to execute object files* series.
 
 - [ELF file](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
 - [elf.h](https://man7.org/linux/man-pages/man5/elf.5.html)
-- [readelf](https://man7.org/linux/man-pages/man1/readelf.1.html) 
+- [readelf](https://man7.org/linux/man-pages/man1/readelf.1.html)
+- [page](https://en.wikipedia.org/wiki/Page_(computer_memory))
+- [data alignment](https://en.wikipedia.org/wiki/Data_structure_alignment)
 
 ## [Part 1](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
 
