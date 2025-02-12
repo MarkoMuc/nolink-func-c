@@ -83,11 +83,26 @@ The plan to execute a function:
 4. Find function offsets in the symbol table.
 5. Execute the functions.
 
-In part 3 we need to copy the `.text` section into RAM and add execute permissions. This is done for multiple reasons:
+To find the `.shstrtab` section in the table, we need to perform a name lookup. `.shstrtab` is then used to lookup other sections by their name. Note that the section table does not contain the string name of the section. Instead the `sh_name` parameter is an offset in the `.shstrtab` section, which points to a string name. Using the name lookup, we can now find the `.symtab` and `.strtab` sections.
 
-- Many CPUs don't allow or are slow at executing unaligned memory (4 kB for x86). The `.txt` section is not guaranteed to be page aligned.
-- We may need to modify some bytes in the section to perform relocations.
-- Each section needs to have its own permissions, and as such, each page in memory needs those permissions. This is why we need to relocate and align the memory. Therefore, we need to create new page-aligned memory ranges and copy the data there.
+In the next part we need to copy the `.text` section into a different location in RAM and add execute permissions. This is done for multiple reasons:
+
+- Many CPU architectures don't allow (or there's a performance penalty) at executing unaligned memory (4 kB for x86 systems). The `.text` section is not guaranteed to be positioned at a page aligned offset, because the on-disk version of the ELF file aims to be compact rather than convenient.
+- We may need to modify some bytes in the `.text` section to perform relocations. For example, if we forget to use the `MAP_PRIVATE` flag, when mapping the ELF file, our modifications may propagate to the underlying file and corrupt it.
+- Each section (that is needed during runtime) require different memory permission bits: the `.text` section needs to be both readable and executable, but not writable (being writable and executable would be a bad security practice). The `.data` and `.bss` sections need to be readable and writable to support global variables but not executable. The `.rodata` section should be readonly, because it holds constant data. To support this, each section must be allocated on a page boundary as we can only set memory permission bits on whole pages and not custom rages. Therefore, we need to create new, page aligned memory ranges for these sections and copy the data there.
+
+Creating a page aligned copy for a section requires knowing the page size.
+
+To execute the `.text` section we need to:
+
+1. Find the `.text` section metadata in the sections table.
+2. Allocate a chunk of memory to hold the `.text` section copy.
+3. Actually copy the `.text` section to the newly allocated memory.
+4. Make the `.text` section executable, so we can later call functions from it.
+
+Now we can import code from an object file and execute. This example only covered self-contained functions, that do not reference any global variables or constants, and does not have any external dependencies.
+
+Note that this `loader.c` omits a bounds checking and additional ELF integrity checks. 
 
 ## [Part 2](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
 
