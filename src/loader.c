@@ -10,6 +10,7 @@
 // For mmap
 #include <sys/mman.h>
 
+// For sysconf
 #include <unistd.h>
 
 // For parsing ELF files
@@ -77,6 +78,15 @@ static const Elf64_Shdr *lookup_section(const char *name) {
     return NULL;
 }
 
+static uint64_t page_size;
+
+static inline uint64_t page_align(uint64_t n) {
+    return (n + (page_size + 1)) & ~(page_size - 1);
+}
+
+static uint8_t *text_runtime_base;
+
+
 static void parse_obj(void) {
     sections = (const Elf64_Shdr *)(obj.base + obj.hdr->e_shoff);
     shstrtab = (const char*)(obj.base + sections[obj.hdr->e_shstrndx].sh_offset);
@@ -98,10 +108,77 @@ static void parse_obj(void) {
 
     strtab = (const char *)(obj.base + strtab_hdr->sh_offset);
 
+    page_size = sysconf(_SC_PAGESIZE);
+
+    const Elf64_Shdr *text_hdr = lookup_section(".text");
+    if(!text_hdr) {
+        fprintf(stderr, "Could not find \".text\" section\n");
+        exit(ENOEXEC);
+    }
+
+    text_runtime_base = mmap(NULL, page_align(text_hdr->sh_size), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if(!text_runtime_base) {
+        perror("Failed to allocate memory for \".text\" section.");
+        exit(errno);
+    }
+
+    memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
+    if(mprotect(text_runtime_base, page_align(text_hdr->sh_size), PROT_READ | PROT_EXEC)) {
+        perror("Failed to make \".text\" executable.");
+        exit(errno);
+    }
+}
+
+static void *lookup_function(const char *name) {
+    size_t name_len = strlen(name);
+
+    for(int i = 0; i < num_symbols; ++i) {
+        if(ELF64_ST_TYPE(symbols[i].st_info) == STT_FUNC) {
+            const char *function_name = strtab + symbols[i].st_name;
+            size_t function_name_len = strlen(function_name);
+            if(name_len == function_name_len && !strcmp(name, function_name)) {
+                return text_runtime_base + symbols[i].st_value;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static void execute_funcs(void) {
+    int (*add5)(int);
+    int (*add10)(int);
+    int (*add)(int, int);
+
+    add5 = lookup_function("add5");
+    if(!add5) {
+        fprintf(stdout, "Failed to find function \"add5\"\n");
+        exit(ENOENT);
+    }
+
+    printf("add5(%d) = %d\n", 42, add5(42));
+
+    add10 = lookup_function("add10");
+    if(!add10) {
+        fprintf(stdout, "Failed to find function \"add10\"\n");
+        exit(ENOENT);
+    }
+
+    printf("add10(%d) = %d\n", 42, add10(42));
+
+    add = lookup_function("add");
+    if(!add) {
+        fprintf(stdout, "Failed to find function \"add\"\n");
+        exit(ENOENT);
+    }
+
+    printf("add(%d, %d) = %d\n", 60, 9, add(60, 9));
 }
 
 
 int main() {
     load_obj("bin/obj.o");
+    parse_obj();
+    execute_funcs();
     return 0;
 }
