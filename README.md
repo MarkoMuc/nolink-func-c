@@ -9,6 +9,7 @@
 
 ## Contents
 
-- ``src`` contains the C main code.
-- ``obj`` contains the obj code and C code to generate it.
-- `material.md` contains the explanation, that is a shorter version of the series linked in [Resources](##Resources).
+- `src` contains the C main code.
+- `obj` contains the obj code and C code to generate it.
+- `material.md` contains extra links and material, that is a shorter version of the series linked in [Resources](##Resources).
+- `notes/` contains notes for each part of the series.
