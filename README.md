@@ -13,3 +13,4 @@
 - `obj` contains the obj code and C code to generate it.
 - `material.md` contains extra links and material, that is a shorter version of the series linked in [Resources](##Resources).
 - `notes/` contains notes for each part of the series.
+- `local_archive/` contains a local archive of the four blogs. This is done in case they get pulled down one day. I do not claim any ownership over them and are there just for archival purposes.
