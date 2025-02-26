@@ -1,4 +1,6 @@
-# How To Execute An Object File [Part 1](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
+# How To Execute An Object File Part 1
+[\[1\]](https://blog.cloudflare.com/how-to-execute-an-object-file-part-1)
+[\[2\]](../local_archive/how-to-execute-an-object-file-part-1.html)
 
 Compilation is a multi-stage process. First, the source code is compiled into machine code, which is saved in object files, afterwards, the linker assembles all object files into a single working program and binds references together. The output of a linker is an executable file.
 

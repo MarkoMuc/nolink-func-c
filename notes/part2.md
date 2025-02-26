@@ -1,4 +1,6 @@
-## [Part 2](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
+# How To Execute An Object File Part 2
+[\[1\]](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
+[\[2\]](../local_archive/how-to-execute-an-object-file-part-2.html)
 
 The two functions used in the previous example are completely self contained, meaning their output was computed solely based on the input, without any external code. Additional steps are needed to handle code with some dependencies.
 
