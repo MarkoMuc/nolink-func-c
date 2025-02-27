@@ -123,6 +123,10 @@ static void parse_obj(void) {
     }
 
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
+
+    *((uint32_t*)(text_runtime_base + 0x1f + 1)) = 0xffffffdc;
+    *((uint32_t*)(text_runtime_base + 0x2c + 1)) = 0xffffffcf;
+
     if(mprotect(text_runtime_base, page_align(text_hdr->sh_size), PROT_READ | PROT_EXEC)) {
         perror("Failed to make \".text\" executable.");
         exit(errno);
@@ -148,7 +152,7 @@ static void *lookup_function(const char *name) {
 static void execute_funcs(void) {
     int (*add5)(int);
     int (*add10)(int);
-    int (*add)(int, int);
+    // int (*add)(int, int);
 
     add5 = lookup_function("add5");
     if(!add5) {
@@ -166,13 +170,13 @@ static void execute_funcs(void) {
 
     printf("add10(%d) = %d\n", 42, add10(42));
 
-    add = lookup_function("add");
-    if(!add) {
-        fprintf(stdout, "Failed to find function \"add\"\n");
-        exit(ENOENT);
-    }
-
-    printf("add(%d, %d) = %d\n", 60, 9, add(60, 9));
+    // add = lookup_function("add");
+    // if(!add) {
+    //     fprintf(stdout, "Failed to find function \"add\"\n");
+    //     exit(ENOENT);
+    // }
+    //
+    // printf("add(%d, %d) = %d\n", 60, 9, add(60, 9));
 }
 
 

@@ -18,13 +18,13 @@ Our function `add10` can be implemented by applying `add5` two times. Our new `.
 
 If we use the `add5` functions inside the `add10` function, to calculate add 10, the result is not correct. 
 
-Its time to analyze the `obj.o` file with `objdump --disassemble --section=.text obj.o`. The two important lines are the `e8 00 00 00 00` lines. Both are a `callq` assembly instructions, which is a near, relative call.
+Its time to analyze the `obj.o` file with `objdump --disassemble --section=.text obj.o`. The two important lines are the `e8 00 00 00 00` lines. Both are a `callq` assembly instructions, which represents a near, relative, displacement relative call.
 
-This variant of the call instruction consist of 5 bytes: the `0xe8` prefix and a 4-byte argument. The argument is the distance between the function we want to call and the current position(actually the next instruction).
+This variant of the call instruction consist of 5 bytes: the `0xe8` prefix and a 4-byte argument. The argument is the distance between the function we want to call and the current position (more accurately the next instruction after `callq`).
 
-The position of the two calls are `0x1f and 0x2c`. In the first case the argument is calculated as `0x0 - 0x24 = -0x24`. Since negatives are presented by their two's complement, the representation should be `0xffffffdc` and for the second call it would be `0xffffffcf`.
+The position of the two calls are `0x1f` and `0x2c`. In the first case the argument is calculated as `0x0 - 0x24 = -0x24`, where `0x0` is the starting location of `add5`. A negative number means we need to jump backwards. Since negatives are presented by their two's complement, the representation should be `0xffffffdc` and for the second call it would be `0xffffffcf`.
 
-But the compiler does not calculate the correct argument. The compiler just leaves them at `0x00000000`. Let's try if our hypothesis is correct, by patching our loaded .text copy before executing it.
+But the compiler does not calculate the correct argument. The compiler just leaves them at `0x00000000`. Let's try if our hypothesis is correct, by patching our loaded `.text` copy before executing it.
 
 ## Relocations
 
