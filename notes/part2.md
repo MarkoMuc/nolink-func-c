@@ -28,11 +28,13 @@ But the compiler does not calculate the correct argument. The compiler just leav
 
 ## Relocations
 
-The problem with our toy object file is that both functions are declared with external linkage-the default setting for all functions and globals in C. The compiler is not sure where the add5 code will end up in the target binary. As such the compiler avoids making any assumptions and doesn't calculate the relative offset argument of the call insturctions. Let's try this by declaring the add5 fuction as `static`.
+The problem with our toy object file is that both functions are declared with external linkage-the default setting for all functions and globals in C. The compiler is not sure where the `add5` code will end up in the target binary. As such the compiler avoids making any assumptions and doesn't calculate the relative offset argument of the call instructions. Let's try this by declaring the `add5` function as `static`.
 
-Now that the function is declared with internal linkeage, the compiler calculates the argument. Note that x86 is little endian. Also note that, since we can still call the static function inside the loader, the `static` keyword should not be used as a security feature to hide APIs from potential malicious users.
+Now that the function is declared with internal linkage, the compiler calculates the argument. Note that x86 is little endian.
 
-With external linkage, the compiler doesn't calculate the argument and leaving the calculation to the linker. But the linker needs some kind of clues to calculate it, this clues are called **relocations**. The relocatinos can be inspected with `readlef` by using `readelf --sections obj.o`.
+Even thought the function `add5` is declared as static, we can still call it from the `loader` tool, basically ignoring the fact that it is an "internal" function now. Because of this, the `static` keyword should not be used as a security feature to hide APIs from potential malicious users.
+
+With external linkage, the compiler doesn't calculate the argument and leaving the calculation to the linker. But the linker needs some kind of clues to calculate it, this clues or instructions for the later stages, are called **relocations**. The relocations can be inspected with `readlef` by using `readelf --sections obj.o`.
 
 We can find that the compiler created a `.rela.text` section, by convention, all relative sections have a `.rela` appendix.
 
