@@ -9,6 +9,7 @@ Each part corresponds to a part in the *How to execute object files* series.
 - [readelf](https://man7.org/linux/man-pages/man1/readelf.1.html)
 - [page](https://en.wikipedia.org/wiki/Page_(computer_memory))
 - [data alignment](https://en.wikipedia.org/wiki/Data_structure_alignment)
+- [x86 ISA](https://www.felixcloutier.com/x86)
 
 ## Notes
 

@@ -2,9 +2,19 @@
 [\[online\]](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
 [\[local\]](../local_archive/how-to-execute-an-object-file-part-2.html)
 
-The two functions used in the previous example are completely self contained, meaning their output was computed solely based on the input, without any external code. Additional steps are needed to handle code with some dependencies.
+The two functions used in the previous example are completely self-contained, meaning their output was computed solely based on the input, without any external code or data dependencies. Additional steps are needed to handle code with dependencies.
 
-### Handling relocations
+## Handling relocations
+
+Our function `add10` can be implemented by applying `add5` two times. Our new `.obj` file will be as follows
+
+```C
+  ...
+  int add10(int num) {
+    num = add5(num);
+    return add5(num);
+  }
+```
 
 If we use the `add5` functions inside the `add10` function, to calculate add 10, the result is not correct. 
 
@@ -16,7 +26,7 @@ The position of the two calls are `0x1f and 0x2c`. In the first case the argumen
 
 But the compiler does not calculate the correct argument. The compiler just leaves them at `0x00000000`. Let's try if our hypothesis is correct, by patching our loaded .text copy before executing it.
 
-### Relocations
+## Relocations
 
 The problem with our toy object file is that both functions are declared with external linkage-the default setting for all functions and globals in C. The compiler is not sure where the add5 code will end up in the target binary. As such the compiler avoids making any assumptions and doesn't calculate the relative offset argument of the call insturctions. Let's try this by declaring the add5 fuction as `static`.
 

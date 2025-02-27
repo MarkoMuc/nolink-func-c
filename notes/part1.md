@@ -8,7 +8,7 @@ Today, executables are also dynamically linked, which means all code is not pres
 
 Runtime linking is done by the OS, which invokes the *dynamic loader*. The dynamic loader finds the shared libraries, maps them to the process's address space, and resolves all dependencies our code has on them.
 
-### Loading an object file into the process memory
+## Loading an object file into the process memory
 
 The following is the contents of the object file, that we will load into memory.
 
@@ -32,7 +32,7 @@ Executing the object file is the same as using it as a library. Since we do not 
 
 At this stage, the object file is copied into memory. This can be done by filling up a buffer, but since an object file can be large, we instead map it into memory when needed. To do this, `mmap` is used, so the OS lazily reads the part of the file we need when we need it. Note that this only maps in the object file, afterwards we need to parse the object file, which is actually an ELF file.
 
-### Parsing ELF files
+## Parsing ELF files
 
 Segments (also known as program headers) and sections are the main parts of an ELF file.
 
@@ -55,7 +55,7 @@ Short descriptions of various ELF sections:
 - `.symtab`: information about the symbols in the object file (functions, global variables, constants, etc.), including external symbols if they are present.
 - `.strtab` and `.shstrtab`: contains packed strings for the ELF file. These are strings describing the names of other ELF structures, like symbols from `.symtab` or section names. ELF format aims to make its structures compact and of a fixed size, so all strings are stored in one place, and their respective data structures just reference them as an offset in either `.strtab` or `.shstrtab` sections, instead of storing the full string locally.
 
-### The `.symtab` section
+## The `.symtab` section
 
 Our functions are stored in the `.text` sections, but since the section is just a byte blob, we need to extract the locations of each function. To do this, we use the `.symtab` section. `readelf --symbols` can come in handy to read and visualize it.
 
