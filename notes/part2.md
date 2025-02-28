@@ -40,21 +40,21 @@ We can find that the compiler created a `.rela.text` section, by convention, all
 
 To examine the relocations we use `readelf --relocs obj.o`. There are two relocation sections `.rela.eh_frame` and `.real.text`. The `.rela.eh_frame` section can be ignored this time.
 
-Let's analyse the `.rela.text` section:
+Let's further analyse the `.rela.text` section:
 
-- *Offset* column tells us exactly where in the target section(.text in this case) the fix/adjustment is needed.
-- *Info* is a combined value: the upper 32 bits - only 16 bits are shown in the output above - represent the index of the symbol in the symbol table, with respect to which the relocation si preformed. In our example it is 8 and if we run `readelf --symbols` we will see that it points to an entry corresponding to the add5 function. The lower 32 bits(4 in our case) is a relocation type
-- *Type* describes the relocation type. This is a pseudo-column: readelf actually generates it from the lower 32bits of the *Info* field. Different relocation types have different formulas we need to apply to perform the relocation.
+- *Offset* column tells us exactly where in the target section (`.text` in this case) the fix/adjustment is needed.
+- *Info* is a combined value: the upper 32 bits - only 16 bits are shown in the output above - represent the index of the symbol in the symbol table, with respect to which the relocation is preformed. In our example it is 8 and if we run `readelf --symbols` we will see that it points to an entry corresponding to the `add5` function. The lower 32 bits (4 in our case) is a relocation type
+- *Type* describes the relocation type. This is a pseudo-column: `readelf` actually generates it from the lower 32bits of the *Info* field. Different relocation types have different formulas we need to apply to perform the relocation.
 - *Sym. Value* may mean different things based on the relocation type, but most of the time it is the symbol offset with respect to which we perform the relocation.
-- *Addend* is a constant we may need to use in the relocation formula. Depending on the relocation type, readelf actually adds the decoded symbol name to the output, so the column name is `Sym. Name + Addend` above but the actual field sotres the addend only.
+- *Addend* is a constant we may need to use in the relocation formula. Depending on the relocation type, `readelf` actually adds the decoded symbol name to the output, so the column name is `Sym. Name + Addend` above but the actual field stores the addend only.
 
-In a nutshell. these entries tell us what we need to patch the `.text` section at offsets `0x20` and `0x2d`. To calculate it we apply the formula for `R_X86_64_PLT32` relocation. Based on [this](https://refspecs.linuxfoundation.org/elf/x86_64-abi-0.95.pdf) ELF specification, the result of our relocation is word32. The formula we use is L + A - P, where:
+In a nutshell, these entries tell us what we need to patch the `.text` section at offsets `0x20` and `0x2d`. To calculate it we apply the formula for `R_X86_64_PLT32` relocation. Based on the ELF specification, the result of our relocation is `word32`. The formula we use is `L + A - P`, where:
 
-- L is the address of the symbol, with respect to which the relocation is performed(add5 in our case).
-- A is the constant addend(4 in our case).
+- L is the address of the symbol, with respect to which the relocation is performed (`add5` in our case).
+- A is the constant addend (`4` in our case).
 - P is the address/offset, where we store the result of the relocation.
 
-When the relocation formula references some symbol addresses or offsets, we shoudl use the actual - runtime in our case - addresses in the calculations. For example we use `text_runtime_base + 0x2d` as P for the second relocation and not just 0x2d.
+When the relocation formula references some symbol addresses or offsets, we should use the actual - runtime in our case -addresses in the calculations. For example we use `text_runtime_base + 0x2d` as P for the second relocation and not just `0x2d`.
 
 Now we just implement this in the loader.
 
