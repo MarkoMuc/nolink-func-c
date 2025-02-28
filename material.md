@@ -10,6 +10,7 @@ Each part corresponds to a part in the *How to execute object files* series.
 - [page](https://en.wikipedia.org/wiki/Page_(computer_memory))
 - [data alignment](https://en.wikipedia.org/wiki/Data_structure_alignment)
 - [x86 ISA](https://www.felixcloutier.com/x86)
+- [System V ABI](https://refspecs.linuxfoundation.org/elf/x86_64-abi-0.95.pdf)
 
 ## Notes
 
