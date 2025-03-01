@@ -65,7 +65,7 @@ The output of `readelf` command has various fields:
   - `Size`: size of each symbol.
   - `Value`: the name is misleading, this represents the offset from the start of the containing section in this context. In our case functions are offset from the `.text` section.
 
-### Finding and executing a function form an object file
+## Finding and executing a function form an object file
 
 The plan to execute a function:
 
@@ -96,3 +96,12 @@ Now we can import code from an object file and execute. This example only covere
 
 Note that this `loader.c` omits a bounds checking and additional ELF integrity checks. 
 
+## Extra
+
+More detailed explanation on how to search/parse the ELF file.
+
+- Searching for sections:
+  1. Finding the `section header table`: from the ELF header we get the `e_shoff` value. This value represents an offset relative to the start of the ELF file, which use to locate the section table.
+  2. Finding the `.shstrtab` section: from the ELF header we get the `e_shstrndx` value. This is an offset relative to the `section header table`. From the section table we get the `sh_offset` value, this is an offset relative to the ELF file, which we use to locate the `.shstrtab` section.
+  3. Finding a specific section consists of traversing the `section table` and taking the `sh_name` value, which is an offset in the `.shstrtab` section, here we can find the section name. If the name matches the section we are looking for, we can use the `sh_offset` value to locate the section.
+- 
