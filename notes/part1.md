@@ -104,4 +104,6 @@ More detailed explanation on how to search/parse the ELF file.
   1. Finding the `section header table`: from the ELF header we get the `e_shoff` value. This value represents an offset relative to the start of the ELF file, which use to locate the section table.
   2. Finding the `.shstrtab` section: from the ELF header we get the `e_shstrndx` value. This is an offset relative to the `section header table`. From the section table we get the `sh_offset` value, this is an offset relative to the ELF file, which we use to locate the `.shstrtab` section.
   3. Finding a specific section consists of traversing the `section table` and taking the `sh_name` value, which is an offset in the `.shstrtab` section, here we can find the section name. If the name matches the section we are looking for, we can use the `sh_offset` value to locate the section.
-- 
+- Searching for symbols/functions:
+  1. Finding the `.symtab` and `.strtab` section: find the two sections as specified above.
+  2. Finding a function: traverse the `.symtab`, use the `st_name` value, which is an offset in the `.strtab` containing the function/symbol name. If the name matches, the `st_value` value in the `.symtab` represents an offset in the `.text` section where the function is located. Note that how `st_value` value should be interpreted depends on what type of symbol we are reading.
