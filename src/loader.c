@@ -86,6 +86,46 @@ static inline uint64_t page_align(uint64_t n) {
 
 static uint8_t *text_runtime_base;
 
+#define R_X86_64_PLT32 4
+
+static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
+    const char *section_name = shstrtab + section->sh_name;
+    size_t section_name_len = strlen(section_name);
+
+    if(strlen(".text") == section_name_len && !strcmp(".text", section_name)) {
+        return text_runtime_base;
+    }
+    fprintf(stderr, "No runtime base address for section %s\n", section_name);
+    exit(ENOENT);
+}
+
+static void do_text_relocations(void) {
+    // Since the name .rela.text is a convention, we would need to figure out which section should be
+    // patched by these relocations. This is done by examining the rela_text_hdr.
+    const Elf64_Shdr *rela_text_hdr = lookup_section(".rela.text");
+    if(!rela_text_hdr) {
+        fprintf(stderr, "Could not find \".rela.text\" section\n");
+        exit(ENOEXEC);
+    }
+
+    int num_relocations = rela_text_hdr->sh_size / rela_text_hdr->sh_entsize;
+    const Elf64_Rela *relocations = (Elf64_Rela *)(obj.base + rela_text_hdr->sh_offset);
+
+    for(int i = 0; i < num_relocations; i++) {
+        int symbol_idx = ELF64_R_SYM(relocations[i].r_info);
+        int type = ELF64_R_TYPE(relocations[i].r_info);
+
+        uint8_t *patch_offset = text_runtime_base + relocations[i].r_offset;
+        uint8_t *symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
+
+        switch (type) {
+            case R_X86_64_PLT32:
+                *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
+                printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
+            break;
+        }
+    }
+}
 
 static void parse_obj(void) {
     sections = (const Elf64_Shdr *)(obj.base + obj.hdr->e_shoff);
@@ -124,8 +164,7 @@ static void parse_obj(void) {
 
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
 
-    *((uint32_t*)(text_runtime_base + 0x1f + 1)) = 0xffffffdc;
-    *((uint32_t*)(text_runtime_base + 0x2c + 1)) = 0xffffffcf;
+    do_text_relocations();
 
     if(mprotect(text_runtime_base, page_align(text_hdr->sh_size), PROT_READ | PROT_EXEC)) {
         perror("Failed to make \".text\" executable.");
