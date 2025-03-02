@@ -18,7 +18,12 @@ Our function `add10` can be implemented by applying `add5` two times. Our new `.
 
 If we use the `add5` functions inside the `add10` function, to calculate add 10, the result is not correct. 
 
-Its time to analyze the `obj.o` file with `objdump --disassemble --section=.text obj.o`. The two important lines are the `e8 00 00 00 00` lines. Both are a `callq` assembly instructions, which represents a near, relative, displacement relative call.
+Its time to analyze the `obj.o` file this is done with:
+```BASH
+$ objdump --disassemble --section=.text obj.o
+```
+
+The two important lines in the output are the `e8 00 00 00 00` lines. Both are a `callq` assembly instructions, which represents a near, relative, displacement relative call.
 
 This variant of the call instruction consist of 5 bytes: the `0xe8` prefix and a 4-byte argument. The argument is the distance between the function we want to call and the current position (more accurately the next instruction after `callq`).
 
@@ -34,11 +39,21 @@ Now that the function is declared with internal linkage, the compiler calculates
 
 Even thought the function `add5` is declared as static, we can still call it from the `loader` tool, basically ignoring the fact that it is an "internal" function now. Because of this, the `static` keyword should not be used as a security feature to hide APIs from potential malicious users.
 
-With external linkage, the compiler doesn't calculate the argument and leaving the calculation to the linker. But the linker needs some kind of clues to calculate it, this clues or instructions for the later stages, are called **relocations**. The relocations can be inspected with `readlef` by using `readelf --sections obj.o`.
+With external linkage, the compiler doesn't calculate the argument and leaving the calculation to the linker. But the linker needs some kind of clues to calculate it, this clues or instructions for the later stages, are called **relocations**. The relocations can be inspected with `readlef` by using:
+
+```BASH
+$ readelf --sections obj.o
+```
 
 We can find that the compiler created a `.rela.text` section, by convention, all relative sections have a `.rela` appendix.
 
-To examine the relocations we use `readelf --relocs obj.o`. There are two relocation sections `.rela.eh_frame` and `.real.text`. The `.rela.eh_frame` section can be ignored this time.
+To examine the relocations we use:
+
+```BASH
+$ readelf --relocs obj.o
+```
+
+There are two relocation sections `.rela.eh_frame` and `.real.text`. The `.rela.eh_frame` section can be ignored this time.
 
 Let's further analyse the `.rela.text` section:
 
