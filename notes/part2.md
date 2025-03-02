@@ -74,3 +74,43 @@ When the relocation formula references some symbol addresses or offsets, we shou
 Now we just implement this in the loader.
 
 Our relocation also involved `text_runtime_base` address, which is not available at compile time. That's why the compiler could not calculate the call arguments in the first place and had to emit the relocations instead.
+
+## Handling constant data and global variables
+
+So far the object files contained only executable code with no state. That is, the imported functions could compute their output solely based on the inputs. Lets add some constants and global variables to our obj file.
+
+```C
+  ...
+
+  const char *get_hello(void) {
+      return "Hello, world!";
+  }
+
+  static int var = 5;
+
+  int get_var(void) {
+      return var;
+  }
+
+  void set_var(int num) {
+      var = num;
+  }
+```
+
+Running the `loader` crashes because it does not find the `.rodata` section. This section has been added to hold the `Hello, world!` string.
+
+Lets check what new sections, symbols and relocations are in out new object file
+
+```BASH
+$ readelf --sections obj.o
+$ readelf --relocs obj.o
+$ readelf --symbols obj.o
+```
+
+We can see that an additional section `.rodata` has been added, section `.data` has also been populated (previously it had size 0). Symbol table section also now contains `var` and `get/set_var`. To import our newly added code and make it work, we also need to map `.data` and `.rodata` sections in addition to the `.text` section and process three `R_x86_64_PC32` relocations that were added.
+
+There is one caveat. The ELF specification defines that `R_x86_64_PC32` relocation produces a 32-bit output similar to the `R_X86_64_PLT32` relocation. This means that the distance in memory between the patched position in `.text` and the referenced symbol has to be small enough to fit into a 32-bit value (note that this is a signed 32-bit integer). We use `mmap` to allocate memory for the object section copies, but `mmap` may allocate the mapping anywhere in the process address. This means that the separately allocated sections may end up having `.rodata` or `.data` section mapped too far away from the `.text` section and will not be able to process the `R_x86_64_PC32` relocations.
+
+This can be solved by allocating enough memory with one `mmap` call to store all the needed sections.
+
+We also need to implement relocation for Type `R_X86_64_PLT32`. The relocation formula is `S + A - P`. In our case S is essentially the same as L for `R_x86_64_PC32`, we can just reuse our previous implementation.

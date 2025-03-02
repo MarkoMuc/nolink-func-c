@@ -65,12 +65,13 @@ static const char *strtab = NULL;
 
 static const Elf64_Shdr *lookup_section(const char *name) {
     size_t name_len = strlen(name);
-    for(Elf64_Half i = 0; i < obj.hdr->e_shnum; ++i) {
+    for(Elf64_Half i = 0; i < obj.hdr->e_shnum; i++) {
         const char *section_name = shstrtab + sections[i].sh_name;
         size_t section_name_len = strlen(section_name);
+
         if(name_len == section_name_len && !strcmp(name, section_name)) {
             if(sections[i].sh_size) {
-                return &sections[i];
+                return sections + i;
             }
         }
     }
@@ -81,12 +82,12 @@ static const Elf64_Shdr *lookup_section(const char *name) {
 static uint64_t page_size;
 
 static inline uint64_t page_align(uint64_t n) {
-    return (n + (page_size + 1)) & ~(page_size - 1);
+    return (n + (page_size - 1)) & ~(page_size - 1);
 }
 
 static uint8_t *text_runtime_base;
-
-#define R_X86_64_PLT32 4
+static uint8_t *data_runtime_base;
+static uint8_t *rodata_runtime_base;
 
 static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
     const char *section_name = shstrtab + section->sh_name;
@@ -95,6 +96,15 @@ static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
     if(strlen(".text") == section_name_len && !strcmp(".text", section_name)) {
         return text_runtime_base;
     }
+
+    if(strlen(".data") == section_name_len && !strcmp(".data", section_name)) {
+        return data_runtime_base;
+    }
+
+    if(strlen(".rodata") == section_name_len && !strcmp(".rodata", section_name)) {
+        return rodata_runtime_base;
+    }
+
     fprintf(stderr, "No runtime base address for section %s\n", section_name);
     exit(ENOENT);
 }
@@ -119,6 +129,7 @@ static void do_text_relocations(void) {
         uint8_t *symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
 
         switch (type) {
+            case R_X86_64_PC32:
             case R_X86_64_PLT32:
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
                 printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
@@ -156,13 +167,33 @@ static void parse_obj(void) {
         exit(ENOEXEC);
     }
 
-    text_runtime_base = mmap(NULL, page_align(text_hdr->sh_size), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if(!text_runtime_base) {
+    const Elf64_Shdr *data_hdr = lookup_section(".data");
+    if(!data_hdr) {
+        fprintf(stderr, "Could not find \".data\" section\n");
+        exit(ENOEXEC);
+    }
+
+    const Elf64_Shdr *rodata_hdr = lookup_section(".rodata");
+    if(!rodata_hdr) {
+        fprintf(stderr, "Could not find \".rodata\" section\n");
+        exit(ENOEXEC);
+    }
+
+    size_t full_section_size =  page_align(text_hdr->sh_size) + page_align(data_hdr->sh_size) + page_align(rodata_hdr->sh_size);
+
+    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    if(text_runtime_base == MAP_FAILED) {
         perror("Failed to allocate memory for \".text\" section.");
         exit(errno);
     }
 
+    data_runtime_base = text_runtime_base + page_align(text_hdr->sh_size);
+    rodata_runtime_base = data_runtime_base + page_align(data_hdr->sh_size);
+
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
+    memcpy(data_runtime_base, obj.base + data_hdr->sh_offset, data_hdr->sh_size);
+    memcpy(rodata_runtime_base, obj.base + rodata_hdr->sh_offset, rodata_hdr->sh_size);
 
     do_text_relocations();
 
@@ -170,10 +201,15 @@ static void parse_obj(void) {
         perror("Failed to make \".text\" executable.");
         exit(errno);
     }
+
+    if (mprotect(rodata_runtime_base, page_align(rodata_hdr->sh_size), PROT_READ)) {
+        perror("Failed to make \".rodata\" readonly");
+        exit(errno);
+    }
 }
 
 static void *lookup_function(const char *name) {
-    size_t name_len = strlen(name);
+   size_t name_len = strlen(name);
 
     for(int i = 0; i < num_symbols; ++i) {
         if(ELF64_ST_TYPE(symbols[i].st_info) == STT_FUNC) {
@@ -191,14 +227,15 @@ static void *lookup_function(const char *name) {
 static void execute_funcs(void) {
     int (*add5)(int);
     int (*add10)(int);
-    // int (*add)(int, int);
+    const char *(*get_hello)(void);
+    int (*get_var)(void);
+    void (*set_var)(int num);
 
     add5 = lookup_function("add5");
     if(!add5) {
         fprintf(stdout, "Failed to find function \"add5\"\n");
         exit(ENOENT);
     }
-
     printf("add5(%d) = %d\n", 42, add5(42));
 
     add10 = lookup_function("add10");
@@ -206,16 +243,30 @@ static void execute_funcs(void) {
         fprintf(stdout, "Failed to find function \"add10\"\n");
         exit(ENOENT);
     }
-
     printf("add10(%d) = %d\n", 42, add10(42));
 
-    // add = lookup_function("add");
-    // if(!add) {
-    //     fprintf(stdout, "Failed to find function \"add\"\n");
-    //     exit(ENOENT);
-    // }
-    //
-    // printf("add(%d, %d) = %d\n", 60, 9, add(60, 9));
+    get_hello = lookup_function("get_hello");
+    if (!get_hello) {
+        fputs("Failed to find \"get_hello\" function\n", stderr);
+        exit(ENOENT);
+    }
+    printf("get_hello() = %s\n", get_hello());
+
+    get_var = lookup_function("get_var");
+    if(!get_var) {
+        fprintf(stdout, "Failed to find function \"get_var\"\n");
+        exit(ENOENT);
+    }
+    printf("get_var() = %d\n", get_var());
+
+    set_var = lookup_function("set_var");
+    if(!set_var) {
+        fprintf(stdout, "Failed to find function \"set_var\"\n");
+        exit(ENOENT);
+    }
+    set_var(42);
+    printf("set_var(42)\n");
+    printf("get_var() = %d\n", get_var());
 }
 
 
