@@ -1,5 +1,3 @@
-#include <stdio.h>
-
 int add5(int num){
     return num + 5;
 }
@@ -21,8 +19,4 @@ int get_var(void) {
 
 void set_var(int num) {
     var = num;
-}
-
-void say_hello(void) {
-    puts("Hello, world!");
 }

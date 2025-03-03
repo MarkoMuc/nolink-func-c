@@ -26,59 +26,6 @@ typedef union {
 
 static objhdr obj;
 
-// Sections table
-static const Elf64_Shdr *sections;
-static const char *shstrtab = NULL;
-
-// Symbols table
-static const Elf64_Sym *symbols;
-
-// Number of entries in the symbols table
-static int num_symbols;
-static const char *strtab = NULL;
-
-static uint64_t page_size;
-
-static uint8_t *text_runtime_base;
-static uint8_t *data_runtime_base;
-static uint8_t *rodata_runtime_base;
-
-static inline uint64_t page_align(uint64_t n) {
-    return (n + (page_size - 1)) & ~(page_size - 1);
-}
-
-static void *lookup_function(const char *name) {
-   size_t name_len = strlen(name);
-
-    for(int i = 0; i < num_symbols; ++i) {
-        if(ELF64_ST_TYPE(symbols[i].st_info) == STT_FUNC) {
-            const char *function_name = strtab + symbols[i].st_name;
-            size_t function_name_len = strlen(function_name);
-            if(name_len == function_name_len && !strcmp(name, function_name)) {
-                return text_runtime_base + symbols[i].st_value;
-            }
-        }
-    }
-
-    return NULL;
-}
-
-static const Elf64_Shdr *lookup_section(const char *name) {
-    size_t name_len = strlen(name);
-    for(Elf64_Half i = 0; i < obj.hdr->e_shnum; i++) {
-        const char *section_name = shstrtab + sections[i].sh_name;
-        size_t section_name_len = strlen(section_name);
-
-        if(name_len == section_name_len && !strcmp(name, section_name)) {
-            if(sections[i].sh_size) {
-                return sections + i;
-            }
-        }
-    }
-
-    return NULL;
-}
-
 static void load_obj(const char* file) {
     struct stat sb;
 
@@ -104,6 +51,43 @@ static void load_obj(const char* file) {
 
     close(fd);
 }
+
+// Sections table
+static const Elf64_Shdr *sections;
+static const char *shstrtab = NULL;
+
+// Symbols table
+static const Elf64_Sym *symbols;
+
+// Number of entries in the symbols table
+static int num_symbols;
+static const char *strtab = NULL;
+
+static const Elf64_Shdr *lookup_section(const char *name) {
+    size_t name_len = strlen(name);
+    for(Elf64_Half i = 0; i < obj.hdr->e_shnum; i++) {
+        const char *section_name = shstrtab + sections[i].sh_name;
+        size_t section_name_len = strlen(section_name);
+
+        if(name_len == section_name_len && !strcmp(name, section_name)) {
+            if(sections[i].sh_size) {
+                return sections + i;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static uint64_t page_size;
+
+static inline uint64_t page_align(uint64_t n) {
+    return (n + (page_size - 1)) & ~(page_size - 1);
+}
+
+static uint8_t *text_runtime_base;
+static uint8_t *data_runtime_base;
+static uint8_t *rodata_runtime_base;
 
 static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
     const char *section_name = shstrtab + section->sh_name;
@@ -224,6 +208,22 @@ static void parse_obj(void) {
     }
 }
 
+static void *lookup_function(const char *name) {
+   size_t name_len = strlen(name);
+
+    for(int i = 0; i < num_symbols; ++i) {
+        if(ELF64_ST_TYPE(symbols[i].st_info) == STT_FUNC) {
+            const char *function_name = strtab + symbols[i].st_name;
+            size_t function_name_len = strlen(function_name);
+            if(name_len == function_name_len && !strcmp(name, function_name)) {
+                return text_runtime_base + symbols[i].st_value;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 static void execute_funcs(void) {
     int (*add5)(int);
     int (*add10)(int);
@@ -268,6 +268,7 @@ static void execute_funcs(void) {
     printf("set_var(42)\n");
     printf("get_var() = %d\n", get_var());
 }
+
 
 int main() {
     load_obj("bin/obj.o");
