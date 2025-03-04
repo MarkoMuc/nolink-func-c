@@ -230,6 +230,7 @@ static void execute_funcs(void) {
     const char *(*get_hello)(void);
     int (*get_var)(void);
     void (*set_var)(int num);
+    void (*say_hello)(void);
 
     add5 = lookup_function("add5");
     if(!add5) {
@@ -252,6 +253,15 @@ static void execute_funcs(void) {
     }
     printf("get_hello() = %s\n", get_hello());
 
+    say_hello = lookup_function("say_hello");
+    if (!say_hello) {
+        fputs("Failed to find \"say_hello\" function\n", stderr);
+        exit(ENOENT);
+    }
+
+    printf("say_hello()\n");
+    say_hello();
+
     get_var = lookup_function("get_var");
     if(!get_var) {
         fprintf(stdout, "Failed to find function \"get_var\"\n");
@@ -264,8 +274,8 @@ static void execute_funcs(void) {
         fprintf(stdout, "Failed to find function \"set_var\"\n");
         exit(ENOENT);
     }
-    set_var(42);
     printf("set_var(42)\n");
+    set_var(42);
     printf("get_var() = %d\n", get_var());
 }
 
