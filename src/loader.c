@@ -43,6 +43,11 @@ static uint8_t *text_runtime_base;
 static uint8_t *data_runtime_base;
 static uint8_t *rodata_runtime_base;
 
+static int my_puts(const char *s) {
+    puts("my_puts executed");
+    return puts(s);
+}
+
 static inline uint64_t page_align(uint64_t n) {
     return (n + (page_size - 1)) & ~(page_size - 1);
 }

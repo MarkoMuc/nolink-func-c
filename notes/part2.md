@@ -6,7 +6,7 @@ The two functions used in the previous example are completely self-contained, me
 
 ## Handling relocations
 
-Our function `add10` can be implemented by applying `add5` two times. Our new `.obj` file will be as follows
+Our function `add10` can be implemented by applying `add5` two times. Our new `.o` file will be as follows
 
 ```C
   ...

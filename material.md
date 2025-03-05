@@ -11,6 +11,8 @@ Each part corresponds to a part in the *How to execute object files* series.
 - [data alignment](https://en.wikipedia.org/wiki/Data_structure_alignment)
 - [x86 ISA](https://www.felixcloutier.com/x86)
 - [System V ABI](https://refspecs.linuxfoundation.org/elf/x86_64-abi-0.95.pdf)
+- [Dynamic Linking](https://refspecs.linuxfoundation.org/ELF/zSeries/lzsabi0_zSeries/x2251.html)
+- [Dynamic Loader](https://man7.org/linux/man-pages/man8/ld.so.8.html)
 
 ## Notes
 
