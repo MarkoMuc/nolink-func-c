@@ -37,11 +37,16 @@ static const Elf64_Sym *symbols;
 static int num_symbols;
 static const char *strtab = NULL;
 
+// Page size to align memory
 static uint64_t page_size;
 
+// Runtime addresses for sections used with relocations
 static uint8_t *text_runtime_base;
 static uint8_t *data_runtime_base;
 static uint8_t *rodata_runtime_base;
+
+// Number of external symbols in the symbol table
+static int num_ext_symbols = 0;
 
 static int my_puts(const char *s) {
     puts("my_puts executed");
@@ -82,6 +87,24 @@ static const Elf64_Shdr *lookup_section(const char *name) {
     }
 
     return NULL;
+}
+
+static void count_external_symbols(void) {
+    const Elf64_Shdr *rela_text_hdr = lookup_section(".rela.text");
+    if(!rela_text_hdr) {
+        fprintf(stderr, "Could not find \".rela.text\" section\n");
+        exit(ENOEXEC);
+    }
+
+    int num_relocs = rela_text_hdr->sh_size / rela_text_hdr->sh_entsize;
+    const Elf64_Rela *relocs = (Elf64_Rela *)(obj.base + rela_text_hdr->sh_offset);
+
+    for(int i = 0; i < num_relocs; i++) {
+        int symbol_idx = ELF64_R_SYM(relocs[i].r_info);
+        if(symbols[symbol_idx].st_shndx == SHN_UNDEF) {
+            num_ext_symbols++;
+        }
+    }
 }
 
 static void load_obj(const char* file) {

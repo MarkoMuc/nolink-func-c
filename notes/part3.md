@@ -57,3 +57,11 @@ Often executables have dependencies on shared libraries and shared libraries hav
 When a shared library or an ELF executable is linked, the linker enumerates all the external references and creates two or more additional sections in the ELF file. The two mandatory ones are the Procedure Linkage Table (PLT) and the Global Offset Table (GOT).
 
 In a nutshell PLT/GOT is just a jumptable for external code. At the linking stage the linker resolves all external 32-bit relative relocations with respect to a locally generated PLT/GOT table. It can do that, because this table would become part of the final ELF file itself, so it will be close to the main code, when the file is mapped into memory at runtime. Later, at runtime the dynamic loader populates PLT/GOT tables for every loaded ELF file (both the executable and the shared libraries) with the runtime addresses of all the dependencies. Eventually, when the program code calls some external library function, the CPU jumps through the local PLT/GOT table to the final code.
+
+Why do we need two ELF sections to implement one jumptable? This is because real world PLT/GOT is a bit more complex. Resolving all external references at runtime may significantly slow down program startup time, so symbol resolution is implemented via a "lazy approach". This means a reference is resolved by the dynamic loader only when the code actually tries to call a particular function. If the main application code never calls a library function, that reference will never be resolved.
+
+## Implementing a simplified PLT/GOT
+
+We will only implement a simple jump table, which resolves external references when the object file is loaded and parsed, not a full-blown PLT/GOT with lazy resolution. First of all we need to know the size of the table: for ELF executables and shared libraries the linker will count the external references at link stage and create appropriately sized PLT and GOT sections. Because we are dealing with raw object files we would have to do another pass over the `.rela.text` sections and count all the relocations, which point to an entry in the `.symtab` with undefined section index (or `0` in code).
+
+
