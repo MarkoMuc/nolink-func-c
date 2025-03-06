@@ -62,6 +62,64 @@ Why do we need two ELF sections to implement one jumptable? This is because real
 
 ## Implementing a simplified PLT/GOT
 
-We will only implement a simple jump table, which resolves external references when the object file is loaded and parsed, not a full-blown PLT/GOT with lazy resolution. First of all we need to know the size of the table: for ELF executables and shared libraries the linker will count the external references at link stage and create appropriately sized PLT and GOT sections. Because we are dealing with raw object files we would have to do another pass over the `.rela.text` sections and count all the relocations, which point to an entry in the `.symtab` with undefined section index (or `0` in code).
+We will only implement a simple jump table, which resolves external references when the object file is loaded and parsed,
+not a full-blown PLT/GOT with lazy resolution. First of all we need to know the size of the table: for ELF executables
+and shared libraries the linker will count the external references at link stage and create appropriately sized PLT and
+GOT sections. Because we are dealing with raw object files we would have to do another pass over the `.rela.text`
+sections and count all the relocations, which point to an entry in the `.symtab` with undefined 
+section index (or `0` in code).
+
+We need to decide the actual size in bytes for our jumptable. How many bytes per symbol should we allocate?
+First we need to design our jumptable format. In its simple form our jumptable should be just a collection of
+unconditional CPU jump instructions, one for each external symbol. Unfortunately modern x64 CPU architecture does not
+provide a jump instruction, where an address pointer can be a direct operand. Instead, the jump address needs to be
+stored in memory somewhere close (within 32-bit offset) and the offset is the actual operand. For each external symbol,
+we need to store the jump address (8 bytes on a 64-bit CPU) and the actual jump instruction with an offset operand
+(6 bytes for x64 architecture).
+
+We can use represent an entry in the jumptable with the following C structure:
+
+```C
+struct ext_jump {
+    uint8_t *addr;
+    /* unconditional x64 JMP instruction */
+    /* should always be {0xff, 0x25, 0xf2, 0xff, 0xff, 0xff} */
+    /* so it would jump to an address stored at addr above */
+    uint8_t instr[6];
+};
+ 
+struct ext_jump *jumptable;
+```
+
+We've also added a global variable to store the base address of the jumptable, which will be allocated later.
+With the above approach the actual jump instruction will always be constant for every external symbol.
+Since we allocate a dedicated entry for each external symbol with this structure, the `addr` member would always be at
+the same offset from the end of the jump instruction in `instr`: `-14` bytes or `0xfffffff2` in hex for a 32-bit operand.
+So `instr` will always be `{0xff, 0x25, 0xf2, 0xff, 0xff, 0xff}`:`0xff` and `0x25` is the encoding of the x64 jump
+instruction and its modifier and `0xfffffff2` is the operand offset in little-endian format.
+
+We allocate and populate the jumptable when parsing the object file. Since we need to resolve 32-bit relocations from
+the `.text` section to this table, it has to be close in memory to the main code. So we allocate it at the same time
+as `.text`, `.data` and `.rodata` sections. This section also needs to be marked as executable.
 
 
+Now that the jumptable is prepared, we need to populate it properly. This will be done by improving the
+`do_text_relocations` implementation to handle the case of external symbols. The `No runtime base address for section`
+error is actually cased by the way we calculated the `symbol_address` in this function.
+
+Currently the runtime address is the symbol's offset in the symbol's section runtime address, but external symbols do
+not have an associated section. To fix this function, we first check if the symbol is external, otherwise the address
+calculation states the same. In case of an external symbol, we create an entry for it in the jumptable, the `addr`
+field's value is equal to the address of the external symbol/function and populate the x64 jump instruction with our
+fixed operand and store the runtime address of the instruction in the `symbol_address` variable. Later the 
+existing code in `do_text_relocatinos` will resolve the `.text` relocation with respect to the address
+in `symbol_address` in the same way as it did it before.
+
+The only missing bit now is the implementation of the newly introduced `lookup_ext_function` helper. Real world loaders
+may have complicated logic on how to find and resolve symbols in memory at runtime. But in our case we only return the
+function pointer to `my_puts` function.
+
+## Conclusion
+
+The end result is the `loader` program that can handle external references in object files. We also learned how to hook
+any such external function call and divert the code to a custom implementation.

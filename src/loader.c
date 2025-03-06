@@ -48,6 +48,14 @@ static uint8_t *rodata_runtime_base;
 // Number of external symbols in the symbol table
 static int num_ext_symbols = 0;
 
+// Jumptable entry 
+struct ext_jump {
+    uint8_t *addr;
+    uint8_t instr[6];
+};
+
+struct ext_jump *jumptable;
+
 static int my_puts(const char *s) {
     puts("my_puts executed");
     return puts(s);
@@ -71,6 +79,17 @@ static void *lookup_function(const char *name) {
     }
 
     return NULL;
+}
+
+static void *lookup_ext_function(const char *name) {
+    size_t name_len = strlen(name);
+
+    if (name_len == strlen("puts") && !strcmp(name, "puts")) {
+        return my_puts;
+    }
+
+    fprintf(stderr, "No address for function %s\n", name);
+    exit(ENOENT);
 }
 
 static const Elf64_Shdr *lookup_section(const char *name) {
@@ -170,7 +189,26 @@ static void do_text_relocations(void) {
         int type = ELF64_R_TYPE(relocations[i].r_info);
 
         uint8_t *patch_offset = text_runtime_base + relocations[i].r_offset;
-        uint8_t *symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
+        uint8_t *symbol_address;
+
+        if (symbols[symbol_idx].st_shndx == SHN_UNDEF){
+            static int curr_jump_idx = 0;
+
+            jumptable[curr_jump_idx].addr = lookup_ext_function(strtab + symbols[symbol_idx].st_name);
+
+            jumptable[curr_jump_idx].instr[0] = 0xff;
+            jumptable[curr_jump_idx].instr[1] = 0x25;
+            jumptable[curr_jump_idx].instr[2] = 0xf2;
+            jumptable[curr_jump_idx].instr[3] = 0xff;
+            jumptable[curr_jump_idx].instr[4] = 0xff;
+            jumptable[curr_jump_idx].instr[5] = 0xff;
+
+            symbol_address = (uint8_t *)(&jumptable[curr_jump_idx].instr);
+
+            curr_jump_idx++;
+        } else {
+            symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
+        }
 
         switch (type) {
             case R_X86_64_PLT32: // L + A - P
@@ -223,7 +261,9 @@ static void parse_obj(void) {
         exit(ENOEXEC);
     }
 
-    size_t full_section_size =  page_align(text_hdr->sh_size) + page_align(data_hdr->sh_size) + page_align(rodata_hdr->sh_size);
+    count_external_symbols();
+
+    size_t full_section_size =  page_align(text_hdr->sh_size) + page_align(data_hdr->sh_size) + page_align(rodata_hdr->sh_size) + page_align(sizeof(struct ext_jump) * num_ext_symbols);
 
     text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -234,6 +274,7 @@ static void parse_obj(void) {
 
     data_runtime_base = text_runtime_base + page_align(text_hdr->sh_size);
     rodata_runtime_base = data_runtime_base + page_align(data_hdr->sh_size);
+    jumptable = (struct ext_jump *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
 
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
     memcpy(data_runtime_base, obj.base + data_hdr->sh_offset, data_hdr->sh_size);
@@ -248,6 +289,11 @@ static void parse_obj(void) {
 
     if (mprotect(rodata_runtime_base, page_align(rodata_hdr->sh_size), PROT_READ)) {
         perror("Failed to make \".rodata\" readonly");
+        exit(errno);
+    }
+
+    if (mprotect(jumptable, page_align(sizeof(struct ext_jump) * num_ext_symbols), PROT_READ | PROT_EXEC)) {
+        perror("Failed to make \"jumptable\" executable");
         exit(errno);
     }
 }
