@@ -114,3 +114,27 @@ There is one caveat. The ELF specification defines that `R_x86_64_PC32` relocati
 This can be solved by allocating enough memory with one `mmap` call to store all the needed sections.
 
 We also need to implement relocation for Type `R_X86_64_PLT32`. The relocation formula is `S + A - P`. In our case S is essentially the same as L for `R_x86_64_PC32`, we can just reuse our previous implementation.
+
+## Extra
+
+If we only follow the article, our `loader` does not work correctly. The `loader` fails to correctly relocate the symbol
+for the constant string `Hello, world!` found in the `.rodata` section. The following is the output of our `loader`
+indicating there is an issue.
+
+```
+...
+get_hello() = (null)
+...
+```
+
+If we once again take a look at the relocations, we can see that one of the relocation types is actually `R_x86_64_32`.
+The corresponding relocations line is as following:
+
+```
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+000000000038  00040000000a R_X86_64_32       0000000000000000 .rodata + 0
+```
+
+If we check the offset, we can make sure that this relates to the constant string used in `get_hello` function.
+The issue arises when we are calculating the relocation offset. The formula for `R_x86_64_32` is actually `S + A`.
+This means we need to add another `case` in our `switch` statement.
