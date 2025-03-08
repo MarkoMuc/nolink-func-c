@@ -1,7 +1,7 @@
 # How To Execute An Object File Part 2
 [\[online\]](https://blog.cloudflare.com/how-to-execute-an-object-file-part-2)
 [\[local\]](../local_archive/how-to-execute-an-object-file-part-2.html)
-[\[local\]](../local_archive/better_quality_archive/How to execute an object file_ Part 2.html)
+[\[local\]](../local_archive/better_quality_archive/how-to-execute-an-object-file-part-2.html)
 
 The two functions used in the previous example are completely self-contained, meaning their output was computed solely based on the input, without any external code or data dependencies. Additional steps are needed to handle code with dependencies.
 
