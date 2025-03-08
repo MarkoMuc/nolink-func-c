@@ -18,3 +18,4 @@ Each part corresponds to a part in the *How to execute object files* series.
 
 - [How to execute an object file part 1](./notes/part1.md)
 - [How to execute an object file part 2](./notes/part2.md)
+- [How to execute an object file part 3](./notes/part3.md)
