@@ -139,3 +139,28 @@ The corresponding relocations line is as following:
 If we check the offset, we can make sure that this relates to the constant string used in `get_hello` function.
 The issue arises when we are calculating the relocation offset. The formula for `R_x86_64_32` is actually `S + A`.
 This means we need to add another `case` in our `switch` statement.
+
+Using the calculation for `R_x86_64_32` type does not work. This time let's look at the disassembly of the object file
+specifically lets look at the `.text` section
+
+```
+$objdump --disassembly --section=.text obj.o
+0000000000000033 <get_hello>:
+  33:   55                      push   %rbp
+  34:   48 89 e5                mov    %rsp,%rbp
+  37:   b8 00 00 00 00          mov    $0x0,%eax
+  3c:   5d                      pop    %rbp
+  3d:   c3                      ret
+```
+
+Instruction on line `0x37` corresponds with the relocation with offset `0x38`. This is a 32-bit move instruction
+`MOV r32, imm32`. Since we are using a `mmap` the allocated memory for our three sections is addressed by a 64-bit
+value. But the `mov` instruction expects at most a 32 bit value, and unlike the last time, this is not an offset
+but an immediate value/absolute address. This means that our runtime address of the `.rodata` section does not fit
+into this instruction. We will need another way to solve this relocation.
+
+Try:
+
+1. Compile the object file with different flags like `-mcmodel=large` or PC-relative instructions.
+2. Create a hook/jump where you load the 64-bit address.
+4. Use mmap with 32-bit addressing?
