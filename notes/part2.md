@@ -159,8 +159,18 @@ value. But the `mov` instruction expects at most a 32 bit value, and unlike the 
 but an immediate value/absolute address. This means that our runtime address of the `.rodata` section does not fit
 into this instruction. We will need another way to solve this relocation.
 
+Solutions
+
+1. The easiest solution is to tell `gcc` to generate position-independent code, instead of absolute addressing.
+This can be done with `-fpic` and does not require chaning anything in the `loader`, since the relocation type
+becomes `R_x86_64_PC32`.
+
+```BASH
+  $gcc -fpic obj/obj.c
+```
+
 Try:
 
-1. Compile the object file with different flags like `-mcmodel=large` or PC-relative instructions.
-2. Create a hook/jump where you load the 64-bit address.
-4. Use mmap with 32-bit addressing?
+1. Compile the object file with different flags like `-mcmodel=large`.
+2. Create a hook/jump where you load the 64-bit addresshttps://www.fri.uni-lj.si/sl/novice/novica/dan-umetne-inteligenca-nvidia-fri-ai-day-2025.
+3. Use mmap with 32-bit addressing?
