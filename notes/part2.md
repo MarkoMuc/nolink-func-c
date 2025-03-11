@@ -169,8 +169,40 @@ becomes `R_x86_64_PC32`.
   $gcc -fpic obj/obj.c
 ```
 
+2. The second option also consists of using `gcc` options, this time we use `-mcmodel=large`. Checking the
+[gnu gcc manual](https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html#index-mcmodel_003dlarge-4) we can find
+the following description for this option
+
+```
+-mcmodel=large
+    Generate code for the large model. This model makes no assumptions about addresses and sizes of sections.
+```
+
+The resulting code uses 64-bit absolute values when addressing, following is the new relocations table
+
+```
+Relocation section '.rela.text' at offset 0x320 contains 5 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+000000000021  000600000001 R_X86_64_64       0000000000000000 add5 + 0
+000000000035  000600000001 R_X86_64_64       0000000000000000 add5 + 0
+000000000047  000400000001 R_X86_64_64       0000000000000000 .rodata + 0
+000000000057  000300000001 R_X86_64_64       0000000000000000 .data + 0
+00000000006c  000300000001 R_X86_64_64       0000000000000000 .data + 0
+```
+
+Now all relocations use a single new Type `R_X86_64_64`. Checking the ELF specification, this type requires
+calculating relocations as `S + A`, which means that we just have to extend the `switch` case in `do_text_relocations`
+to handle this type. Another key point is to use `uint64_t`, since we are patching a 64-bit value.
+
+```C
+  ...
+  case R_X86_64_64:    // S + A
+      *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
+      break;
+  ...
+```
+
 Try:
 
-1. Compile the object file with different flags like `-mcmodel=large`.
-2. Create a hook/jump where you load the 64-bit addresshttps://www.fri.uni-lj.si/sl/novice/novica/dan-umetne-inteligenca-nvidia-fri-ai-day-2025.
-3. Use mmap with 32-bit addressing?
+1. Create a hook/jump where you load the 64-bit address.
+2. Use mmap with 32-bit addressing?

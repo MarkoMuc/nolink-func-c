@@ -145,9 +145,10 @@ static void do_text_relocations(void) {
         uint8_t *symbol_address = section_runtime_base(&sections[symbols[symbol_idx].st_shndx]) + symbols[symbol_idx].st_value;
 
         switch (type) {
-            case R_X86_64_32:    // S + A
-                *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
-                printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
+            case R_X86_64_64:    // S + A
+                *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
+                printf("Calculated relocation 64: 0x%08lx\n", *((uint64_t *)patch_offset));
+                break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
