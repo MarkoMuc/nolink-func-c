@@ -149,6 +149,10 @@ static void do_text_relocations(void) {
                 *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
                 printf("Calculated relocation 64: 0x%08lx\n", *((uint64_t *)patch_offset));
                 break;
+            case R_X86_64_32:    // S + A
+                *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
+                printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
+                break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
@@ -201,7 +205,13 @@ static void parse_obj(void) {
 
     size_t full_section_size =  page_align(text_hdr->sh_size) + page_align(data_hdr->sh_size) + page_align(rodata_hdr->sh_size);
 
-    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, 
+                             MAP_PRIVATE
+                             |MAP_ANONYMOUS
+#ifdef MMAP_32
+                             | MAP_32BIT
+#endif
+                             , -1, 0);
 
     if(text_runtime_base == MAP_FAILED) {
         perror("Failed to allocate memory for \".text\" section.");

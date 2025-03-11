@@ -166,7 +166,7 @@ This can be done with `-fpic` and does not require chaning anything in the `load
 becomes `R_x86_64_PC32`.
 
 ```BASH
-  $gcc -fpic obj/obj.c
+$gcc -fpic obj/obj.c
 ```
 
 2. The second option also consists of using `gcc` options, this time we use `-mcmodel=large`. Checking the
@@ -202,7 +202,47 @@ to handle this type. Another key point is to use `uint64_t`, since we are patchi
   ...
 ```
 
+3. Since our issue is that the memory allocated by `mmap` is addressed by a 64-bit value, which doesn't fit into the
+32-bit `mov` instruction that the compiler expected, we could solve this issue if we could force `mmap` to allocated
+in a region addressable by 32-bit values. Checking the 
+[options for mmap](https://man7.org/linux/man-pages/man2/mmap.2.html), we can see that there is a `MAP_32BIT` flag
+that does just that.
+
+Now all we have to do is change the line, where we call `mmap` to allocate space for the three sections.
+
+```C
+  ...
+    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, 
+                             MAP_PRIVATE
+                             |MAP_ANONYMOUS
+#ifdef MMAP_32
+                             | MAP_32BIT
+#endif
+                             , -1, 0);
+  ...
+```
+
+And then extend the `switch` case in `do_text_relocations` to handle `R_x86_64_32`. We also use `uintptr_t` to
+suppress the warning which pops up due to casting to a smaller type.
+
+```C
+  ...
+  case R_X86_64_32:    // S + A
+      *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
+      break;
+  ...
+```
+
+
+Note that the `MAP_32BIT` flag is added only if a macro exists, so to compile this code use the following command
+
+```BASH
+$gcc -DMMAP_32 -o bin/loader src/loader.c
+```
+
+**Note** that in this case, the loaded object code functions correctly, but we also now limit the maximum size of our
+object code to the first 2 Gigabytes of the process address space.
+
 Try:
 
 1. Create a hook/jump where you load the 64-bit address.
-2. Use mmap with 32-bit addressing?
