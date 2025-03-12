@@ -63,8 +63,7 @@ static void create_trampoline_func(Trampoline *tramp, uint64_t address, uint32_t
     tramp->data[1] = 0xB8;
     *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
     tramp->data[10] = 0xE9;
-    *((uint32_t*)&tramp->data[11]) = offset; // 64-bit address
-
+    *((uint32_t*)&tramp->data[10]) = offset; // 64-bit address
 }
 
 static void *lookup_function(const char *name) {
@@ -174,19 +173,20 @@ static void do_text_relocations(void) {
                     static size_t trampoline_idx = 0;
                     const uint32_t reloc_address = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
                     uint8_t *instr_start_address = patch_offset - 1;
-                    const uint32_t tramp_offset = (uint32_t)((uintptr_t)&trampoline_runtime_base[trampoline_idx] - (uintptr_t)instr_start_address + 5);
+                    const uint8_t *tramp_offset = (uint8_t*)trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5);
                     const uint8_t *return_offset = (uint8_t *)(uintptr_t)(instr_start_address + 5) - (uintptr_t)(&trampoline_runtime_base[trampoline_idx] + sizeof(Trampoline));
 
                     *instr_start_address = 0xE9;
-                    *((uint32_t *)patch_offset) = tramp_offset;
+                    *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
 
                     create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, (uint32_t)(uintptr_t)return_offset);
 
+                    printf("Calculated trampoline jump: 0x%08x\n", *((uint32_t *)patch_offset));
                     trampoline_idx++;
                 } else {
                     *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
+                    printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
                 }
-                printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
                 break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
