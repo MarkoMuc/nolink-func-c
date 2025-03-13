@@ -243,6 +243,31 @@ $gcc -DMMAP_32 -o bin/loader src/loader.c
 **Note** that in this case, the loaded object code functions correctly, but we also now limit the maximum size of our
 object code to the first 2 Gigabytes of the process address space.
 
-Try:
+4. There does exist a way to relocate correctly, without changing how we compile the code (or in case we only have
+the object code). The logic behind is, to load the 64-bit address with a 64-bit immediate value compatible `move`
+instruction, but this instruction takes up 10 bytes, while the current move only takes up 5 bytes.
+Just overwriting the smaller `move` with the larger one can cause additional complication, since we can overwrite
+the following instructions, we can change the pre calculated offsets that other instructions depend on, enlarge the
+object code, which is not expected by the ELF file, etc.
 
-1. Create a hook/jump where you load the 64-bit address.
+What we need is a 5 byte or less instruction that will overwrite the `move` instruction and that can help us load
+the address into memory. One such instruction is a `jump` with a 32-bit offset. We will use the jump, to safely
+(without changing additional register as a `call` might do) move to a section of memory, where we can add our custom
+instruction to load the 64-bit address.
+
+The new section of memory will contain two instructions a 10 byte `move` and a 5 byte `jump`. The `move` will load
+the 64-bit instructions, the `jump` will return back to the original object code. Now all we need to do is implement it.
+
+Let's create a `Trampoline` structure, the name comes from **trampoline functions**.
+
+```C
+typedef struct {
+    uint8_t data[15];
+    uint8_t *startaddr;
+} Trampoline;
+
+static Trampoline *trampoline_runtime_base;
+```
+
+Since we are using relative jumps and the addresses need to be 32-bit, we should allocate memory for trampoline structure
+at the same time as the other three sections.
