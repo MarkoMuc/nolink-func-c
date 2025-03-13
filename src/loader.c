@@ -43,9 +43,9 @@ static uint8_t *text_runtime_base;
 static uint8_t *data_runtime_base;
 static uint8_t *rodata_runtime_base;
 
-typedef union {
-    uint8_t *startaddr;
+typedef struct {
     uint8_t data[15];
+    uint8_t *startaddr;
 } Trampoline;
 
 static Trampoline *trampoline_runtime_base;
@@ -55,15 +55,14 @@ static inline uint64_t page_align(uint64_t n) {
 }
 
 static void create_trampoline_func(Trampoline *tramp, uint64_t address, uint32_t offset) {
-    // uint8_t data[10] = {
-    //     [0] = 0x48,// RES.W
-    //     [1] = 0xb8 // MOV
-    // };
-    tramp->data[0] = 0x48;
-    tramp->data[1] = 0xB8;
+    tramp->data[0] = 0x48; // RES.W
+    tramp->data[1] = 0xB8; // MOV
     *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
+
+    // printf("Reloc address: 0x%016lx == 0x%016lx\n", address, *((uint64_t*)&tramp->data[2]));
+
     tramp->data[10] = 0xE9;
-    *((uint32_t*)&tramp->data[10]) = offset; // 64-bit address
+    *((uint32_t*)&tramp->data[11]) = offset; // 32-bit offset
 }
 
 static void *lookup_function(const char *name) {
@@ -166,32 +165,38 @@ static void do_text_relocations(void) {
         switch (type) {
             case R_X86_64_64:    // S + A
                 *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
-                printf("Calculated relocation 64: 0x%08lx\n", *((uint64_t *)patch_offset));
+                // printf("Calculated relocation 64: 0x%08lx\n", *((uint64_t *)patch_offset));
                 break;
             case R_X86_64_32:    // S + A
                 if((uintptr_t)symbol_address >> 32 > 0) {
                     static size_t trampoline_idx = 0;
-                    const uint32_t reloc_address = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
+
+                    const uint8_t INSTRUCTION_SIZE = 5;
+                    const uint8_t TRAMPOLINE_SIZE = sizeof(trampoline_runtime_base[0].data);
+                    trampoline_runtime_base[trampoline_idx].startaddr = &(trampoline_runtime_base[trampoline_idx].data[0]);
+
                     uint8_t *instr_start_address = patch_offset - 1;
-                    const uint8_t *tramp_offset = (uint8_t*)trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5);
-                    const uint8_t *return_offset = (uint8_t *)(uintptr_t)(instr_start_address + 5) - (uintptr_t)(&trampoline_runtime_base[trampoline_idx] + sizeof(Trampoline));
+                    const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
+                    const uint8_t *tramp_offset = (uint8_t *)(trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5));
+                    const uint32_t return_offset = (uint32_t)((instr_start_address + 5) - (trampoline_runtime_base[trampoline_idx].startaddr + 15));
 
                     *instr_start_address = 0xE9;
                     *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
 
-                    create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, (uint32_t)(uintptr_t)return_offset);
+                    create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, return_offset);
 
-                    printf("Calculated trampoline jump: 0x%08x\n", *((uint32_t *)patch_offset));
+                    // printf("Calculated trampoline jump : %p + 0x%08x = %p\n", instr_start_address + 5, *((uint32_t *)patch_offset), trampoline_runtime_base[trampoline_idx].startaddr);
+                    // printf("Calculated return jump : %p + 0x%08x = %p\n", (trampoline_runtime_base[trampoline_idx].startaddr + 15), return_offset, (instr_start_address + 5));
                     trampoline_idx++;
                 } else {
                     *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
-                    printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
+                    // printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
                 }
                 break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
-                printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
+                // printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
             break;
         }
     }
@@ -259,12 +264,12 @@ static void parse_obj(void) {
 
     data_runtime_base = text_runtime_base + page_align(text_hdr->sh_size);
     rodata_runtime_base = data_runtime_base + page_align(data_hdr->sh_size);
-    trampoline_runtime_base = (Trampoline *) rodata_runtime_base + page_align(rodata_hdr->sh_size);
+    trampoline_runtime_base = (Trampoline *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
 
-    printf("runtime address of .text: %p\n", text_runtime_base);
-    printf("runtime address of .data: %p\n", data_runtime_base);
-    printf("runtime address of .rodata: %p\n", rodata_runtime_base);
-    printf("runtime address of .trampoline: %p\n", trampoline_runtime_base);
+    // printf("runtime address of .text: %p\n", text_runtime_base);
+    // printf("runtime address of .data: %p\n", data_runtime_base);
+    // printf("runtime address of .rodata: %p\n", rodata_runtime_base);
+    // printf("runtime address of .trampoline: %p\n", trampoline_runtime_base);
 
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
     memcpy(data_runtime_base, obj.base + data_hdr->sh_offset, data_hdr->sh_size);
