@@ -159,9 +159,11 @@ value. But the `mov` instruction expects at most a 32 bit value, and unlike the 
 but an immediate value/absolute address. This means that our runtime address of the `.rodata` section does not fit
 into this instruction. We will need another way to solve this relocation.
 
-Solutions
+### Solutions
 
-1. The easiest solution is to tell `gcc` to generate position-independent code, instead of absolute addressing.
+#### Compiler flag solution number 1
+
+The easiest solution is to tell `gcc` to generate position-independent code, instead of absolute addressing.
 This can be done with `-fpic` and does not require chaning anything in the `loader`, since the relocation type
 becomes `R_x86_64_PC32`.
 
@@ -169,7 +171,9 @@ becomes `R_x86_64_PC32`.
 $gcc -fpic obj/obj.c
 ```
 
-2. The second option also consists of using `gcc` options, this time we use `-mcmodel=large`. Checking the
+#### Compiler flag solution number 2
+
+The second option also consists of using `gcc` options, this time we use `-mcmodel=large`. Checking the
 [gnu gcc manual](https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html#index-mcmodel_003dlarge-4) we can find
 the following description for this option
 
@@ -202,7 +206,9 @@ to handle this type. Another key point is to use `uint64_t`, since we are patchi
   ...
 ```
 
-3. Since our issue is that the memory allocated by `mmap` is addressed by a 64-bit value, which doesn't fit into the
+#### `mmap` solution
+
+Since our issue is that the memory allocated by `mmap` is addressed by a 64-bit value, which doesn't fit into the
 32-bit `mov` instruction that the compiler expected, we could solve this issue if we could force `mmap` to allocated
 in a region addressable by 32-bit values. Checking the 
 [options for mmap](https://man7.org/linux/man-pages/man2/mmap.2.html), we can see that there is a `MAP_32BIT` flag
@@ -243,7 +249,9 @@ $gcc -DMMAP_32 -o bin/loader src/loader.c
 **Note** that in this case, the loaded object code functions correctly, but we also now limit the maximum size of our
 object code to the first 2 Gigabytes of the process address space.
 
-4. There does exist a way to relocate correctly, without changing how we compile the code (or in case we only have
+#### Trampoline solution
+
+There does exist a way to relocate correctly, without changing how we compile the code (or in case we only have
 the object code). The logic behind is, to load the 64-bit address with a 64-bit immediate value compatible `move`
 instruction, but this instruction takes up 10 bytes, while the current move only takes up 5 bytes.
 Just overwriting the smaller `move` with the larger one can cause additional complication, since we can overwrite
