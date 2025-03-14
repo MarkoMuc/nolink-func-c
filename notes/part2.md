@@ -308,6 +308,7 @@ We also need to mark the memory as executable and readable, as we did with the `
 Afterwards we need to add another `case` statement to the `switch` in `do_text_relocations` function.
 
 ```C
+static void do_text_relocations(void) {
   ...
     case R_X86_64_32:    // S + A
         const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
@@ -334,6 +335,7 @@ Afterwards we need to add another `case` statement to the `switch` in `do_text_r
         }
         break;
     ...
+}
 ```
 
 The relocations first calculates the relocation and checks if it can fit into 32 bits, if it can, it just
@@ -388,4 +390,37 @@ get_hello() = Hello, world!
 get_var() = 5
 set_var(42)
 get_var() = 42
+```
+
+**Addendum**: The trampoline function expects to overwrite a 32 bit `mov` which takes a
+register and immediate value. This means that the opcode might differ depending on what
+register the compiler chose. The hardcoded value `0xB8` assumes that we are using the
+`rex` register, we need to fix this and use the register the compiler chose.
+
+This is a simple fix, just save the opcode of the instruction, before we overwrite it
+with a `jmp` in `do_text_relocations`.
+
+```C
+static void do_text_relocations(void) {
+  ...
+    case R_X86_64_32:    // S + A
+      ...
+        const uint8_t mov_opcode = *instr_start_addr;
+        *instr_start_address = 0xE9;
+        *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
+
+        create_trampoline_func(&trampoline_runtime_base[trampoline_idx], mov_opcode, reloc_address, return_offset);
+      ...
+  ...
+}
+```
+
+And use the provided opcode in the trampoline function.
+
+```C
+static void create_trampoline_func(Trampoline *tramp, uint8_t mov_opcode,uint64_t address, uint32_t offset) {
+    ...
+    tramp->data[1] = mov_opcode; // MOV
+    ...
+}
 ```

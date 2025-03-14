@@ -45,6 +45,17 @@ static uint8_t *text_runtime_base;
 static uint8_t *data_runtime_base;
 static uint8_t *rodata_runtime_base;
 
+// Trampoline function
+typedef struct {
+    uint8_t data[15];
+    uint8_t *startaddr;
+} Trampoline;
+
+static Trampoline *trampoline_runtime_base;
+
+// Number of absolute 32 bit relocation
+static size_t num_absolute_relocs = 0;
+
 // Number of external symbols in the symbol table
 static int num_ext_symbols = 0;
 
@@ -63,6 +74,15 @@ static int my_puts(const char *s) {
 
 static inline uint64_t page_align(uint64_t n) {
     return (n + (page_size - 1)) & ~(page_size - 1);
+}
+
+static void create_trampoline_func(Trampoline *tramp, uint8_t mov_opcode, uint64_t address, uint32_t offset) {
+    tramp->data[0] = 0x48; // RES.W
+    tramp->data[1] = mov_opcode; // MOV
+    *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
+
+    tramp->data[10] = 0xE9;
+    *((uint32_t*)&tramp->data[11]) = offset; // 32-bit offset
 }
 
 static void *lookup_function(const char *name) {
@@ -106,6 +126,25 @@ static const Elf64_Shdr *lookup_section(const char *name) {
     }
 
     return NULL;
+}
+
+static void count_absolute_relocations(void) {
+    const Elf64_Shdr *rela_text_hdr = lookup_section(".rela.text");
+    if(!rela_text_hdr) {
+        fprintf(stderr, "Could not find \".rela.text\" section\n");
+        exit(ENOEXEC);
+    }
+
+    int num_relocations = rela_text_hdr->sh_size / rela_text_hdr->sh_entsize;
+    const Elf64_Rela *relocations = (Elf64_Rela *)(obj.base + rela_text_hdr->sh_offset);
+
+    for(int i = 0; i < num_relocations; i++) {
+        int type = ELF64_R_TYPE(relocations[i].r_info);
+        int symbol_idx = ELF64_R_SYM(relocations[i].r_info);
+        if(type == R_X86_64_32) {
+            num_absolute_relocs++;
+        }
+    }
 }
 
 static void count_external_symbols(void) {
@@ -211,10 +250,36 @@ static void do_text_relocations(void) {
         }
 
         switch (type) {
+            case R_X86_64_64:    // S + A
+                *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
+                break;
+            case R_X86_64_32:    // S + A
+                if((uintptr_t)symbol_address >> 32 > 0) {
+                    static size_t trampoline_idx = 0;
+
+                    const uint8_t INSTRUCTION_SIZE = 5;
+                    const uint8_t TRAMPOLINE_SIZE = sizeof(trampoline_runtime_base[0].data);
+                    trampoline_runtime_base[trampoline_idx].startaddr = &(trampoline_runtime_base[trampoline_idx].data[0]);
+
+                    uint8_t *instr_start_address = patch_offset - 1;
+                    const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
+                    const uint8_t *tramp_offset = (uint8_t *)(trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5));
+                    const uint32_t return_offset = (uint32_t)((instr_start_address + 5) - (trampoline_runtime_base[trampoline_idx].startaddr + 15));
+                    const uint8_t mov_opcode = *instr_start_address;
+
+                    *instr_start_address = 0xE9;
+                    *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
+
+                    create_trampoline_func(&trampoline_runtime_base[trampoline_idx], mov_opcode, reloc_address, return_offset);
+
+                    trampoline_idx++;
+                } else {
+                    *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
+                }
+                break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
-                printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
             break;
         }
     }
@@ -262,10 +327,22 @@ static void parse_obj(void) {
     }
 
     count_external_symbols();
+    count_absolute_relocations();
 
-    size_t full_section_size =  page_align(text_hdr->sh_size) + page_align(data_hdr->sh_size) + page_align(rodata_hdr->sh_size) + page_align(sizeof(struct ext_jump) * num_ext_symbols);
+    size_t full_section_size =
+        page_align(text_hdr->sh_size) +
+        page_align(data_hdr->sh_size) +
+        page_align(rodata_hdr->sh_size) +
+        page_align(sizeof(Trampoline) * num_absolute_relocs) +
+        page_align(sizeof(struct ext_jump) * num_ext_symbols);
 
-    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, 
+                             MAP_PRIVATE
+                             |MAP_ANONYMOUS
+#ifdef MMAP_32
+                             | MAP_32BIT
+#endif
+                             , -1, 0);
 
     if(text_runtime_base == MAP_FAILED) {
         perror("Failed to allocate memory for \".text\" section.");
@@ -274,7 +351,8 @@ static void parse_obj(void) {
 
     data_runtime_base = text_runtime_base + page_align(text_hdr->sh_size);
     rodata_runtime_base = data_runtime_base + page_align(data_hdr->sh_size);
-    jumptable = (struct ext_jump *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
+    trampoline_runtime_base = (Trampoline *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
+    jumptable = (struct ext_jump *) ((uint8_t*)trampoline_runtime_base + page_align(sizeof(Trampoline) * num_absolute_relocs));
 
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
     memcpy(data_runtime_base, obj.base + data_hdr->sh_offset, data_hdr->sh_size);
@@ -287,13 +365,18 @@ static void parse_obj(void) {
         exit(errno);
     }
 
-    if (mprotect(rodata_runtime_base, page_align(rodata_hdr->sh_size), PROT_READ)) {
-        perror("Failed to make \".rodata\" readonly");
+    if(mprotect(trampoline_runtime_base, page_align(sizeof(Trampoline) * num_absolute_relocs), PROT_READ | PROT_EXEC)) {
+        perror("Failed to make \"trampoline\" executable.");
         exit(errno);
     }
 
     if (mprotect(jumptable, page_align(sizeof(struct ext_jump) * num_ext_symbols), PROT_READ | PROT_EXEC)) {
         perror("Failed to make \"jumptable\" executable");
+        exit(errno);
+    }
+
+    if (mprotect(rodata_runtime_base, page_align(rodata_hdr->sh_size), PROT_READ)) {
+        perror("Failed to make \".rodata\" readonly");
         exit(errno);
     }
 }

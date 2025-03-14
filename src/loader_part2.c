@@ -55,9 +55,9 @@ static inline uint64_t page_align(uint64_t n) {
     return (n + (page_size - 1)) & ~(page_size - 1);
 }
 
-static void create_trampoline_func(Trampoline *tramp, uint64_t address, uint32_t offset) {
+static void create_trampoline_func(Trampoline *tramp, uint8_t mov_opcode, uint64_t address, uint32_t offset) {
     tramp->data[0] = 0x48; // RES.W
-    tramp->data[1] = 0xB8; // MOV
+    tramp->data[1] = mov_opcode; // MOV
     *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
 
     tramp->data[10] = 0xE9;
@@ -196,11 +196,12 @@ static void do_text_relocations(void) {
                     const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
                     const uint8_t *tramp_offset = (uint8_t *)(trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5));
                     const uint32_t return_offset = (uint32_t)((instr_start_address + 5) - (trampoline_runtime_base[trampoline_idx].startaddr + 15));
+                    const uint8_t mov_opcode = *instr_start_address;
 
                     *instr_start_address = 0xE9;
                     *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
 
-                    create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, return_offset);
+                    create_trampoline_func(&trampoline_runtime_base[trampoline_idx], mov_opcode, reloc_address, return_offset);
 
                     trampoline_idx++;
                 } else {
@@ -281,11 +282,6 @@ static void parse_obj(void) {
     rodata_runtime_base = data_runtime_base + page_align(data_hdr->sh_size);
     trampoline_runtime_base = (Trampoline *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
 
-    // printf("runtime address of .text: %p\n", text_runtime_base);
-    // printf("runtime address of .data: %p\n", data_runtime_base);
-    // printf("runtime address of .rodata: %p\n", rodata_runtime_base);
-    // printf("runtime address of .trampoline: %p\n", trampoline_runtime_base);
-
     memcpy(text_runtime_base, obj.base + text_hdr->sh_offset, text_hdr->sh_size);
     memcpy(data_runtime_base, obj.base + data_hdr->sh_offset, data_hdr->sh_size);
     memcpy(rodata_runtime_base, obj.base + rodata_hdr->sh_offset, rodata_hdr->sh_size);
@@ -298,7 +294,7 @@ static void parse_obj(void) {
     }
 
     if(mprotect(trampoline_runtime_base, page_align(sizeof(Trampoline) * num_absolute_relocs), PROT_READ | PROT_EXEC)) {
-        perror("Failed to make \".text\" executable.");
+        perror("Failed to make \".trampoline\" executable.");
         exit(errno);
     }
 
