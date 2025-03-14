@@ -49,6 +49,7 @@ typedef struct {
 } Trampoline;
 
 static Trampoline *trampoline_runtime_base;
+static size_t num_absolute_relocs = 0;
 
 static inline uint64_t page_align(uint64_t n) {
     return (n + (page_size - 1)) & ~(page_size - 1);
@@ -97,6 +98,45 @@ static const Elf64_Shdr *lookup_section(const char *name) {
     return NULL;
 }
 
+static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
+    const char *section_name = shstrtab + section->sh_name;
+    size_t section_name_len = strlen(section_name);
+
+    if(strlen(".text") == section_name_len && !strcmp(".text", section_name)) {
+        return text_runtime_base;
+    }
+
+    if(strlen(".data") == section_name_len && !strcmp(".data", section_name)) {
+        return data_runtime_base;
+    }
+
+    if(strlen(".rodata") == section_name_len && !strcmp(".rodata", section_name)) {
+        return rodata_runtime_base;
+    }
+
+    fprintf(stderr, "No runtime base address for section %s\n", section_name);
+    exit(ENOENT);
+}
+
+static void count_absolute_relocations(void) {
+    const Elf64_Shdr *rela_text_hdr = lookup_section(".rela.text");
+    if(!rela_text_hdr) {
+        fprintf(stderr, "Could not find \".rela.text\" section\n");
+        exit(ENOEXEC);
+    }
+
+    int num_relocations = rela_text_hdr->sh_size / rela_text_hdr->sh_entsize;
+    const Elf64_Rela *relocations = (Elf64_Rela *)(obj.base + rela_text_hdr->sh_offset);
+
+    for(int i = 0; i < num_relocations; i++) {
+        int type = ELF64_R_TYPE(relocations[i].r_info);
+        int symbol_idx = ELF64_R_SYM(relocations[i].r_info);
+        if(type == R_X86_64_32) {
+            num_absolute_relocs++;
+        }
+    }
+}
+
 static void load_obj(const char* file) {
     struct stat sb;
 
@@ -121,26 +161,6 @@ static void load_obj(const char* file) {
     }
 
     close(fd);
-}
-
-static uint8_t *section_runtime_base(const Elf64_Shdr *section) {
-    const char *section_name = shstrtab + section->sh_name;
-    size_t section_name_len = strlen(section_name);
-
-    if(strlen(".text") == section_name_len && !strcmp(".text", section_name)) {
-        return text_runtime_base;
-    }
-
-    if(strlen(".data") == section_name_len && !strcmp(".data", section_name)) {
-        return data_runtime_base;
-    }
-
-    if(strlen(".rodata") == section_name_len && !strcmp(".rodata", section_name)) {
-        return rodata_runtime_base;
-    }
-
-    fprintf(stderr, "No runtime base address for section %s\n", section_name);
-    exit(ENOENT);
 }
 
 static void do_text_relocations(void) {
@@ -243,11 +263,13 @@ static void parse_obj(void) {
         exit(ENOEXEC);
     }
 
+    count_absolute_relocations();
+
     size_t full_section_size =
         page_align(text_hdr->sh_size) +
         page_align(data_hdr->sh_size) +
         page_align(rodata_hdr->sh_size) +
-        page_align(sizeof(Trampoline) * 3);
+        page_align(sizeof(Trampoline) * num_absolute_relocs);
 
     text_runtime_base = mmap(NULL, full_section_size, PROT_READ | PROT_WRITE, 
                              MAP_PRIVATE
