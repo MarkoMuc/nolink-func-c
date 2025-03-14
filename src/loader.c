@@ -60,8 +60,6 @@ static void create_trampoline_func(Trampoline *tramp, uint64_t address, uint32_t
     tramp->data[1] = 0xB8; // MOV
     *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
 
-    // printf("Reloc address: 0x%016lx == 0x%016lx\n", address, *((uint64_t*)&tramp->data[2]));
-
     tramp->data[10] = 0xE9;
     *((uint32_t*)&tramp->data[11]) = offset; // 32-bit offset
 }
@@ -185,7 +183,6 @@ static void do_text_relocations(void) {
         switch (type) {
             case R_X86_64_64:    // S + A
                 *((uint64_t *)patch_offset) = (uint64_t)symbol_address + relocations[i].r_addend;
-                // printf("Calculated relocation 64: 0x%08lx\n", *((uint64_t *)patch_offset));
                 break;
             case R_X86_64_32:    // S + A
                 if((uintptr_t)symbol_address >> 32 > 0) {
@@ -205,18 +202,14 @@ static void do_text_relocations(void) {
 
                     create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, return_offset);
 
-                    // printf("Calculated trampoline jump : %p + 0x%08x = %p\n", instr_start_address + 5, *((uint32_t *)patch_offset), trampoline_runtime_base[trampoline_idx].startaddr);
-                    // printf("Calculated return jump : %p + 0x%08x = %p\n", (trampoline_runtime_base[trampoline_idx].startaddr + 15), return_offset, (instr_start_address + 5));
                     trampoline_idx++;
                 } else {
                     *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)(symbol_address + relocations[i].r_addend);
-                    // printf("Calculated relocation 32: 0x%08x\n", *((uint32_t *)patch_offset));
                 }
                 break;
             case R_X86_64_PLT32: // L + A - P
             case R_X86_64_PC32:  // S + A - P
                 *((uint32_t *)patch_offset) = symbol_address + relocations[i].r_addend - patch_offset;
-                // printf("Calculated relocation: 0x%08x\n", *((uint32_t *)patch_offset));
             break;
         }
     }
@@ -304,7 +297,7 @@ static void parse_obj(void) {
         exit(errno);
     }
 
-    if(mprotect(trampoline_runtime_base, page_align(sizeof(Trampoline) * 3), PROT_READ | PROT_EXEC)) {
+    if(mprotect(trampoline_runtime_base, page_align(sizeof(Trampoline) * num_absolute_relocs), PROT_READ | PROT_EXEC)) {
         perror("Failed to make \".text\" executable.");
         exit(errno);
     }

@@ -270,4 +270,122 @@ static Trampoline *trampoline_runtime_base;
 ```
 
 Since we are using relative jumps and the addresses need to be 32-bit, we should allocate memory for trampoline structure
-at the same time as the other three sections.
+at the same time as the other three sections. The amount of memory we need to allocate depends on the amount of
+relocations where the object code expects a 32-bit value, but we only have a 64-bit value. Since we would need to know
+the runtime addresses of the three sections, to calculate the relocation value, we will use a conservative estimate, this
+means we allocate enough `Trampoline` structures to use for all relocations of type `R_x86_64_32`, this just means we
+traverse the `.rela.text` sections and count the number of relocations that fit the type.
+
+Afterwards we can allocate additional memory with the other three sections, so the offsets are more guaranteed to be
+32 bit.
+
+```C
+    ...
+    count_absolute_relocations();
+
+    size_t full_section_size =
+        page_align(text_hdr->sh_size) +
+        page_align(data_hdr->sh_size) +
+        page_align(rodata_hdr->sh_size) +
+        page_align(sizeof(Trampoline) * num_absolute_relocs);
+    ...
+
+    trampoline_runtime_base = (Trampoline *) (rodata_runtime_base + page_align(rodata_hdr->sh_size));
+    ...
+```
+
+We also need to mark the memory as executable and readable, as we did with the `.text` section.
+
+```C
+    ...
+    if(mprotect(trampoline_runtime_base, page_align(sizeof(Trampoline) * num_absolute_relocs), PROT_READ | PROT_EXEC)) {
+        perror("Failed to make \".text\" executable.");
+        exit(errno);
+    }
+    ...
+```
+
+Afterwards we need to add another `case` statement to the `switch` in `do_text_relocations` function.
+
+```C
+  ...
+    case R_X86_64_32:    // S + A
+        const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
+        if((uintptr_t)reloc_address >> 32 > 0) {
+            static size_t trampoline_idx = 0;
+
+            const uint8_t INSTRUCTION_SIZE = 5;
+            const uint8_t TRAMPOLINE_SIZE = sizeof(trampoline_runtime_base[0].data);
+            trampoline_runtime_base[trampoline_idx].startaddr = &(trampoline_runtime_base[trampoline_idx].data[0]);
+
+            uint8_t *instr_start_address = patch_offset - 1;
+            const uint64_t reloc_address = (uint64_t)(symbol_address + relocations[i].r_addend);
+            const uint8_t *tramp_offset = (uint8_t *)(trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5));
+            const uint32_t return_offset = (uint32_t)((instr_start_address + 5) - (trampoline_runtime_base[trampoline_idx].startaddr + 15));
+
+            *instr_start_address = 0xE9;
+            *((uint32_t *)patch_offset) = (uint32_t)(uintptr_t)tramp_offset;
+
+            create_trampoline_func(&trampoline_runtime_base[trampoline_idx], reloc_address, return_offset);
+
+            trampoline_idx++;
+        } else {
+            *((uint32_t *)patch_offset) = (uint32_t)(reloc_adress);
+        }
+        break;
+    ...
+```
+
+The relocations first calculates the relocation and checks if it can fit into 32 bits, if it can, it just
+relocates normally, otherwise we need to perform the trampoline procedure.
+
+To implement the jump we need to calculated two offsets, the `tramp_offset` is used to jump to the
+trampoline procedure that will load the 64 bit address, the `return_offset` is used to jump back
+to the function code. The variable `patch_offset` carries the location of the instruction that needs
+to be relocated, more specifically it points to the operand of the instruction. We **assume** that the
+full instruction consists of 5 bytes, 4 bytes which are to contain the relocation address and 1 byte
+for opcode. This means that the start of the instruction is `patch_offset - 1`. The start of the
+instruction is needed, since this instruction will be overwritten with our `jmp` to the code
+that will load the 64 bit address.
+
+We overwrite the start of the instruction with `0xE9` which in x86 ISA means a `jmp` with
+a 32 bit offset value. The offset to our trampoline procedure is calculated with
+
+```C
+  const uint8_t *tramp_offset = (uint8_t *)(trampoline_runtime_base[trampoline_idx].startaddr - (instr_start_address + 5));
+```
+
+The `instr_start_address +5` needs to be done, since the offset is relative to the next instruction
+(the processor consumes the jump, which is 5 bytes, and then adds the offset to the current PC
+counter or RIP in x86 ISA).
+
+Then we need to calculate our `return_offset`, the only thing of note is to remember we need to jump
+to the next instruction, since the current one is a `jump` and we will otherwise just jump back and forth
+from the function to the trampoline function.
+
+Now lets look at what the `create_trampoline_func` does
+
+```C
+static void create_trampoline_func(Trampoline *tramp, uint64_t address, uint32_t offset) {
+    tramp->data[0] = 0x48; // RES.W
+    tramp->data[1] = 0xB8; // MOV
+    *((uint64_t*)&tramp->data[2]) = address; // 64-bit address
+
+    tramp->data[10] = 0xE9; // JMP
+    *((uint32_t*)&tramp->data[11]) = offset; // 32-bit offset
+}
+```
+
+This function just creates a 64 bit move instruction followed by the 64 bit address, then
+creates a jump back to the main function.
+
+Now all relocations are successful, and we can see `Hello, World!`.
+
+```
+add5(42) = 47
+add10(42) = 52
+get_hello() = Hello, world!
+get_var() = 5
+set_var(42)
+get_var() = 42
+```
